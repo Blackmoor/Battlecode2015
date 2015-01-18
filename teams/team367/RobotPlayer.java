@@ -337,12 +337,15 @@ public class RobotPlayer {
 		//Supply units
 		if (Clock.getBytecodesLeft() > 850) { //Transfer costs 500, sense costs 100 and we need some processing time
 			double supply = rc.getSupplyLevel();
-			if (supply > myType.supplyUpkeep*10) {		
+			double supplyToKeep = myType.supplyUpkeep*10; // 10 turns worth of supply
+			if (myType == RobotType.COMMANDER)
+				supplyToKeep = (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum()) * myType.supplyUpkeep; // Keep enough to last to the end of the game
+			if (supply > supplyToKeep) {		
 				RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.SUPPLY_TRANSFER_RADIUS_SQUARED, myTeam);			
 				//Pass to first neighbour with half the supply we have
-				//Never pass back to HQ and always fully empty the HQ
+				//Never pass to buildings and always fully empty the HQ
 				for (RobotInfo r: robots) {
-					if (r.type != RobotType.HQ && r.supplyLevel * 2.0 < supply) {
+					if (!r.type.isBuilding && r.supplyLevel * 2.0 < supply) {
 						double toTransfer = supply;
 						if (myType != RobotType.HQ)
 							toTransfer /= 2.0;
@@ -453,10 +456,38 @@ public class RobotPlayer {
 	/*
 	 * If there are no good moves we should stay and fight
 	 */
-	private static void doRetreatMove() {
-		Direction d = myLoc.directionTo(myHQ);
-		rc.setIndicatorString(2, "Threatened - retreating towards HQ " + d);
-		tryMove(d, false);		
+	private static void doRetreatMove() {		
+		try {
+			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
+				flashTowards(myHQ);
+			Direction d = myLoc.directionTo(myHQ);
+			rc.setIndicatorString(2, "Threatened - retreating towards HQ " + d);
+			if (rc.isCoreReady())
+				tryMove(d, false);
+		} catch (GameActionException e) {
+			System.out.println("Retreat exception");
+			//e.printStackTrace();
+		}					
+	}
+	
+	private static void flashTowards(MapLocation m) {
+		//We want to pick a safe tile that is within flash range (10) and nearest to the destination
+		MapLocation[] inRange = MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.FLASH_RANGE_SQUARED);
+		MapLocation best = myLoc;
+		
+		try {
+			for (MapLocation target: inRange) {
+				if (!target.equals(myLoc) && target.distanceSquaredTo(m) < best.distanceSquaredTo(m) && rc.isPathable(myType, target) && !rc.isLocationOccupied(target) && !threats.isThreatened(target)) {
+					best = target;
+				}
+			}
+			
+			if (!best.equals(myLoc))
+				rc.castFlash(best);
+		} catch (GameActionException e) {
+			System.out.println("Flash exception");
+			e.printStackTrace();
+		}
 	}
 	
 	private static void doMinerMove() {
@@ -492,18 +523,29 @@ public class RobotPlayer {
 
 	// Move towards to enemy HQ if we can attack, otherwise head to home HQ
 	private static void doAdvanceMove() {
-		Direction dir = null;
-		if (myType.canAttack()) {
-			if (myType != RobotType.DRONE)
-				dir = bfs.readResult(myLoc, threats.enemyHQ);
-			if (dir == null)
-				dir = myLoc.directionTo(threats.enemyHQ);
-			rc.setIndicatorString(2, "Advancing " + dir);
-		} else {
-			dir = myLoc.directionTo(myHQ);
-			rc.setIndicatorString(2, "HQ Defensive unit " + dir);
+		try {
+			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
+				flashTowards(threats.enemyHQ);
+		} catch (GameActionException e) {
+			System.out.println("Flash exception");
+			e.printStackTrace();
+		}			
+
+		if (rc.isCoreReady()) {
+			Direction dir = null;
+			
+			if (myType.canAttack()) {			
+				if (myType != RobotType.DRONE)
+					dir = bfs.readResult(myLoc, threats.enemyHQ);
+				if (dir == null)
+					dir = myLoc.directionTo(threats.enemyHQ);
+				rc.setIndicatorString(2, "Advancing " + dir);
+			} else {
+				dir = myLoc.directionTo(myHQ);
+				rc.setIndicatorString(2, "HQ Defensive unit " + dir);
+			}
+			tryMove(dir, false);
 		}
-		tryMove(dir, false);
 	}
 	
 	private static boolean doCloseWithEnemyMove(boolean ignoreThreat) {
@@ -527,7 +569,15 @@ public class RobotPlayer {
 		if (nearest != null) {
 			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > myType.attackRadiusSquared) {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
-				tryMove(rc.getLocation().directionTo(nearest.location), ignoreThreat);
+				try {
+					if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
+						flashTowards(threats.enemyHQ);
+				} catch (GameActionException e) {
+					System.out.println("Flash exception");
+					e.printStackTrace();
+				}			
+				if (rc.isCoreReady())
+					tryMove(rc.getLocation().directionTo(nearest.location), ignoreThreat);
 			} else {
 				rc.setIndicatorString(2, "Holding at range with " + nearest.type + " at " + nearest.location);
 			}
@@ -604,14 +654,12 @@ public class RobotPlayer {
 		}
 	}
 	
-	static boolean wouldBlock(Direction d) {
-		MapLocation target = myLoc.add(d);
-		return ((target.x + target.y) % 2 != (myHQ.x + myHQ.y) % 2);
-	}
-	
-	/*
 	// Checks to see if building here would block movement
 	static boolean wouldBlock(Direction d) {
+		MapLocation target = myLoc.add(d);
+		if ((target.x + target.y) % 2 != (myHQ.x + myHQ.y) % 2) // A quick check to ensure we are lined up with the HQ - this will create a chequerboard pattern
+			return true;
+		
 		RobotInfo[] units = rc.senseNearbyRobots(2, myTeam);
 		boolean hasTop = false;
 		boolean hasBottom = false;
@@ -712,7 +760,7 @@ public class RobotPlayer {
 		
 		return false;
 	}
-	*/
+	
 	
 	// This method will attack the weakest enemy in sight
 	static boolean attackWeakest() {
