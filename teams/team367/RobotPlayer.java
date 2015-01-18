@@ -84,13 +84,42 @@ public class RobotPlayer {
 			}
 			
 			//Attack if there is an enemy in sight
-			if (rc.isWeaponReady())
-				attackWeakest();
+			if (rc.isWeaponReady()) {
+				if (rc.senseTowerLocations().length >= 5) { // we do splash damage so look for best target based on how many enemies we can hit
+					RobotInfo[] enemies = rc.senseNearbyRobots(52, enemyTeam); //This is slightly larger than the real range but does include all possible enemies that can be hit with splash
+					MapLocation best = null;
+					int most = 0;
+					for (MapLocation m: MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED)) {
+						int count = adjacentEnemies(m, enemies);
+						if (count > most) {
+							most = count;
+							best = m;
+						}
+					}
+					if (best != null) {
+						try {
+							rc.attackLocation(best);
+						} catch (GameActionException e) {
+							System.out.println("HQ attack exception");
+							//e.printStackTrace();
+						}
+					}
+				} else
+					attackWeakest();
+			}
 			
 			doTransfer();
 			
 			rc.yield();
 		}
+	}
+	
+	private static int adjacentEnemies(MapLocation here, RobotInfo[] enemies) {
+		int count = 0;
+		for (RobotInfo e: enemies)
+			if (e.location.isAdjacentTo(here))
+				count++;
+		return count;
 	}
 	
 	private static void runTower() {
@@ -473,13 +502,14 @@ public class RobotPlayer {
 	private static void flashTowards(MapLocation m, boolean ignoreThreat) {
 		//We want to pick a safe tile that is within flash range (10) and nearest to the destination
 		//If we are allowed to ignore threat store the nearest threatened tile in case there are no safe ones
+		//We don't bother with moves to adjacent tiles!
 		MapLocation[] inRange = MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.FLASH_RANGE_SQUARED);
 		MapLocation bestSafe = myLoc;
 		MapLocation best = myLoc; // The closest regardless of threat
 		
 		try {
 			for (MapLocation target: inRange) {
-				if (!target.equals(myLoc) && rc.isPathable(myType, target) && !rc.isLocationOccupied(target) ) {
+				if (!target.equals(myLoc) && rc.isPathable(myType, target) && !rc.isLocationOccupied(target) && target.distanceSquaredTo(myLoc) > 1) {
 					if (target.distanceSquaredTo(m) < bestSafe.distanceSquaredTo(m) && !threats.isThreatened(target))
 						bestSafe = target;
 					if (target.distanceSquaredTo(m) < best.distanceSquaredTo(m))
