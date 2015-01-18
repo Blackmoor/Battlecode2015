@@ -87,13 +87,16 @@ public class RobotPlayer {
 			if (rc.isWeaponReady()) {
 				if (rc.senseTowerLocations().length >= 5) { // we do splash damage so look for best target based on how many enemies we can hit
 					RobotInfo[] enemies = rc.senseNearbyRobots(52, enemyTeam); //This is slightly larger than the real range but does include all possible enemies that can be hit with splash
+					RobotInfo[] allies = rc.senseNearbyRobots(GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED, myTeam);
 					MapLocation best = null;
 					int most = 0;
 					for (MapLocation m: MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED)) {
-						int count = adjacentEnemies(m, enemies);
-						if (count > most) {
-							most = count;
-							best = m;
+						if (!hasRobot(m, allies)) {
+							int count = adjacentEnemies(m, enemies);
+							if (count > most) {
+								most = count;
+								best = m;
+							}
 						}
 					}
 					if (best != null) {
@@ -112,6 +115,13 @@ public class RobotPlayer {
 			
 			rc.yield();
 		}
+	}
+	
+	private static boolean hasRobot(MapLocation m, RobotInfo[] allies) {
+		for (RobotInfo a: allies)
+			if (a.location.equals(m))
+				return true;
+		return false;
 	}
 	
 	private static int adjacentEnemies(MapLocation here, RobotInfo[] enemies) {
