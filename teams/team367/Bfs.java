@@ -97,7 +97,7 @@ public class Bfs {
 							return -1; // we're done! don't do any work!
 						//Restart the search with more up to data map info
 						initQueue(dest);
-						System.out.print("Restart BFS to " + dest + ", page " + previousPage+ ", start round " + Clock.getRoundNum() + "\n");
+						//System.out.print("Restart BFS to " + dest + ", page " + previousPage+ ", start round " + Clock.getRoundNum() + "\n");
 						return previousPage;
 					} else {
 						return previousPage;
@@ -227,15 +227,17 @@ public class Bfs {
 				if (tt == TerrainTile.UNKNOWN)
 					containsUnknowns = true;
 				
+				/*
 				switch(tt) {
 				case VOID: System.out.print("."); break;
 				case NORMAL: System.out.print(" "); break;
 				case UNKNOWN: System.out.print("?"); break;
 				case OFF_MAP: System.out.print("X"); break;
 				}
+				*/
 									
 			}
-			System.out.println("");
+			//System.out.println("");
 		}
 		
 		//HQs and towers (TODO) block movement
@@ -275,7 +277,7 @@ public class Bfs {
 	private static void doWork(MapLocation dest, int priority, int stopWhen, int page) throws GameActionException {
 		if (!dest.equals(previousDest)) {
 			initQueue(dest);
-			System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
+			//System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
 		}
 
 		previousDest = dest;
@@ -328,9 +330,9 @@ public class Bfs {
 				currentQ = (currentQ + 1) % NUM_QUEUES;
 			}
 			if (emptyCount == NUM_QUEUES) {	
-				// DEBUG to show route
-				System.out.print("Cleanser BFS to " + dest + ", page " + page+ " completed on round " + Clock.getRoundNum() +"\n");
 				/*
+				 * DEBUG to show route
+				System.out.print("Cleanser BFS to " + dest + ", page " + page+ " completed on round " + Clock.getRoundNum() +"\n");
 				MapLocation m = rc.senseHQLocation().add(Direction.NORTH);
 				Direction d = readResult(m, rc.senseEnemyHQLocation());				
 				while (d != null) {
