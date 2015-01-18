@@ -36,7 +36,9 @@ public class Threats {
 		
 		if (enemyTowers == null || current.length != enemyTowers.length) {
 			enemyTowers = current;
-			if (enemyTowers.length >= 2)
+			if (enemyTowers.length >= 5)
+				enemyHQAttackRange = 45; //This takes into account splash damage
+			else if (enemyTowers.length >= 2)
 				enemyHQAttackRange = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
 			else
 				enemyHQAttackRange = RobotType.HQ.attackRadiusSquared;
