@@ -486,7 +486,7 @@ public class RobotPlayer {
 				rc.castFlash(best);
 		} catch (GameActionException e) {
 			System.out.println("Flash exception");
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 	
@@ -528,7 +528,7 @@ public class RobotPlayer {
 				flashTowards(threats.enemyHQ);
 		} catch (GameActionException e) {
 			System.out.println("Flash exception");
-			e.printStackTrace();
+			//e.printStackTrace();
 		}			
 
 		if (rc.isCoreReady()) {
@@ -574,7 +574,7 @@ public class RobotPlayer {
 						flashTowards(threats.enemyHQ);
 				} catch (GameActionException e) {
 					System.out.println("Flash exception");
-					e.printStackTrace();
+					//e.printStackTrace();
 				}			
 				if (rc.isCoreReady())
 					tryMove(rc.getLocation().directionTo(nearest.location), ignoreThreat);
