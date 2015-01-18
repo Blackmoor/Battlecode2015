@@ -203,8 +203,8 @@ public class Threats {
 	public boolean overwhelms(MapLocation myLoc) {
 		double enemyHealth = 0.0;
 		double allyHealth = 0.0;
-		RobotInfo[] units = sensors.units(SensorRange.LONG);
-		int senseRange = rc.getType().sensorRadiusSquared * SensorRange.LONG.multiplier;
+		RobotInfo[] units = sensors.units(SensorRange.CLOSE);
+		int senseRange = rc.getType().sensorRadiusSquared * SensorRange.CLOSE.multiplier;
 		
 		for (MapLocation t: enemyTowers) {
 			if (t.distanceSquaredTo(myLoc) <= senseRange)
