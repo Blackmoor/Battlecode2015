@@ -62,16 +62,21 @@ public class Threats {
 		//Check to see if we have a cached result
 		int now = Clock.getRoundNum();
 		MapLocation myLoc = rc.getLocation();
+		boolean isAdjacent = m.isAdjacentTo(myLoc); 
 		Direction d = myLoc.directionTo(m);
-		if (lastUpdated[d.ordinal()] == now)
-			return myTiles[d.ordinal()];
-
-		lastUpdated[d.ordinal()] = now;	
+		if (isAdjacent) { // We cache the results for adjacent tiles
+			if (lastUpdated[d.ordinal()] == now)
+				return myTiles[d.ordinal()];
+			else
+				lastUpdated[d.ordinal()] = now;	
+		}
+		
 		RobotType myType = rc.getType();
+		Boolean result = false; // Whether this tile is threatened by either a unit or tower or HQ
 		if (threatened[cropX(m.x)][cropY(m.y)]) {
-			myTiles[d.ordinal()] = true;
+			result = true;
 		} else {
-			myTiles[d.ordinal()] = false; //Assume it is safe - the code below will set it to threatened
+			result = false; //Assume it is safe - the code below will set it to threatened
 			
 			//Check for threat from enemy units
 			//We might be able to move in, fire and move out before they act
@@ -130,6 +135,10 @@ public class Threats {
 			}
 			
 			for (RobotInfo u: sensors.enemies(SensorRange.VISIBLE)) {
+				if (u.type == RobotType.MISSILE) { //Assume a missile can reach us
+					result = true;
+					break;
+				}
 				// Can an enemy fire from where it is, or can it advance and then fire before us?
 				int enemyTurns = 0;
 				core = Math.min(0, u.coreDelay);
@@ -137,31 +146,6 @@ public class Threats {
 				supply = u.supplyLevel;
 				MapLocation enemyLoc = u.location;
 				if (u.type.canAttack()) {
-					//Work out if the enemy can fire on us - it might need to move to within range first
-					/*
-					if (u.type.canMove() && enemyLoc.distanceSquaredTo(m) > u.type.attackRadiusSquared) {
-						Direction ed = enemyLoc.directionTo(m);
-						moveCost = ed.isDiagonal()?GameConstants.DIAGONAL_DELAY_MULTIPLIER:1;
-						enemyLoc = enemyLoc.add(ed);
-						
-						//Factor in move
-						while (core >= 1) {
-							core = Math.max(0, core-0.5);
-							weapon = Math.max(0, weapon-0.5);
-							if (supply > u.type.supplyUpkeep) {
-								supply -= u.type.supplyUpkeep;
-								core = Math.max(0, core-0.5);
-								weapon = Math.max(0, weapon-0.5);
-							} else {
-								supply = 0;
-							}
-							enemyTurns++;
-						}
-	
-						weapon = Math.max(u.type.loadingDelay, weapon);
-						core += moveCost*u.type.movementDelay;
-					}
-					*/
 					if (enemyLoc.distanceSquaredTo(m) <= u.type.attackRadiusSquared) { // In fire range
 						while (weapon >= 1) {
 							core = Math.max(0, core-0.5);
@@ -178,10 +162,8 @@ public class Threats {
 						core = Math.max(u.type.cooldownDelay, core);
 						weapon += u.type.attackDelay;
 						
-						//if (myType == RobotType.COMMANDER && Math.abs(now-525) < 15)
-						//	System.out.println(d + " enemy[" + u.type + "] turns " + enemyTurns + " my turns " + turns + " Range from enemy " + enemyLoc + " to tile is " + enemyLoc.distanceSquaredTo(m));
 						if (enemyTurns <= turns) {
-							myTiles[d.ordinal()] = true;
+							result = true;
 							break;
 						}
 					}
@@ -198,7 +180,10 @@ public class Threats {
 		}
 		*/
 		
-		return myTiles[d.ordinal()];		
+		if (isAdjacent)
+			myTiles[d.ordinal()] = result;
+		
+		return result;		
 	}
 	
 	/*
