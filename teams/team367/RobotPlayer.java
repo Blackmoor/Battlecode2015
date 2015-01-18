@@ -459,7 +459,7 @@ public class RobotPlayer {
 	private static void doRetreatMove() {		
 		try {
 			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-				flashTowards(myHQ);
+				flashTowards(myHQ, true);
 			Direction d = myLoc.directionTo(myHQ);
 			rc.setIndicatorString(2, "Threatened - retreating towards HQ " + d);
 			if (rc.isCoreReady())
@@ -470,19 +470,26 @@ public class RobotPlayer {
 		}					
 	}
 	
-	private static void flashTowards(MapLocation m) {
+	private static void flashTowards(MapLocation m, boolean ignoreThreat) {
 		//We want to pick a safe tile that is within flash range (10) and nearest to the destination
+		//If we are allowed to ignore threat store the nearest threatened tile in case there are no safe ones
 		MapLocation[] inRange = MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.FLASH_RANGE_SQUARED);
-		MapLocation best = myLoc;
+		MapLocation bestSafe = myLoc;
+		MapLocation best = myLoc; // The closest regardless of threat
 		
 		try {
 			for (MapLocation target: inRange) {
-				if (!target.equals(myLoc) && target.distanceSquaredTo(m) < best.distanceSquaredTo(m) && rc.isPathable(myType, target) && !rc.isLocationOccupied(target) && !threats.isThreatened(target)) {
-					best = target;
+				if (!target.equals(myLoc) && rc.isPathable(myType, target) && !rc.isLocationOccupied(target) ) {
+					if (target.distanceSquaredTo(m) < bestSafe.distanceSquaredTo(m) && !threats.isThreatened(target))
+						bestSafe = target;
+					if (target.distanceSquaredTo(m) < best.distanceSquaredTo(m))
+						best = target;
 				}
 			}
 			
-			if (!best.equals(myLoc))
+			if (!bestSafe.equals(myLoc))
+				rc.castFlash(bestSafe);
+			else if (ignoreThreat && !best.equals(myLoc))
 				rc.castFlash(best);
 		} catch (GameActionException e) {
 			System.out.println("Flash exception");
@@ -525,7 +532,7 @@ public class RobotPlayer {
 	private static void doAdvanceMove() {
 		try {
 			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-				flashTowards(threats.enemyHQ);
+				flashTowards(threats.enemyHQ, false);
 		} catch (GameActionException e) {
 			System.out.println("Flash exception");
 			//e.printStackTrace();
@@ -571,7 +578,7 @@ public class RobotPlayer {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
 				try {
 					if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-						flashTowards(threats.enemyHQ);
+						flashTowards(threats.enemyHQ, false);
 				} catch (GameActionException e) {
 					System.out.println("Flash exception");
 					//e.printStackTrace();
@@ -625,7 +632,7 @@ public class RobotPlayer {
 			
 			try {
 				if (target != null) {
-					if (myLoc.distanceSquaredTo(target) < 2)
+					if (myLoc.distanceSquaredTo(target) <= GameConstants.MISSILE_RADIUS_SQUARED)
 						rc.explode();
 					else {
 						Direction d = myLoc.directionTo(target);
