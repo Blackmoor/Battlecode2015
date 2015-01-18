@@ -578,7 +578,7 @@ public class RobotPlayer {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
 				try {
 					if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-						flashTowards(threats.enemyHQ, false);
+						flashTowards(nearest.location, false);
 				} catch (GameActionException e) {
 					System.out.println("Flash exception");
 					//e.printStackTrace();
