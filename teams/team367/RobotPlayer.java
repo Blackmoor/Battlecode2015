@@ -9,12 +9,12 @@ public class RobotPlayer {
 	static Bfs bfs; //A background breadth first search class for units that walk on the ground
 	static BuildStrategy strategy; //Used to determine the next build order
 	static Threats threats; //Stored the tiles threatened by the enemy towers and HQ
-	static Sensors sensors;
-	static MapInfo map;
 	static Team myTeam;
 	static Team enemyTeam;
 	static RobotType myType;
 	static MapLocation myHQ;
+	static int senseRange;
+	static int attackRange;
 	static Random rand;
 	static int spawnID;
 	static MapLocation myLoc;
@@ -29,6 +29,8 @@ public class RobotPlayer {
 		enemyTeam = myTeam.opponent();
 		myHQ = rc.senseHQLocation();
 		myLoc = rc.getLocation();
+		senseRange = myType.sensorRadiusSquared;
+		attackRange = myType.attackRadiusSquared;
 		
 		if (myType == RobotType.MISSILE)
 			runMissile();
@@ -42,11 +44,10 @@ public class RobotPlayer {
 			//e.printStackTrace();
 		}
 		
-		map = new MapInfo(rc);
-		if (myType.canMove())
-			bfs = new Bfs(rc, map); // We need to check the breadth first search results to move optimally
-		sensors = new Sensors(rc); // All these units need to sense enemies to determine if a tile is safe
-		threats = new Threats(rc, sensors, map);
+		if (myType.canMove()) {
+			bfs = new Bfs(rc); // We need to check the breadth first search results to move optimally
+		}
+		threats = new Threats(rc);
 		
 		if (myType == RobotType.HQ)
 			runHQ();
@@ -81,8 +82,9 @@ public class RobotPlayer {
 			// See if we need to spawn a beaver
 			if (rc.isCoreReady()) {
 				RobotType build = strategy.getBuildOrder();
-				if (build != null)				
-					trySpawn(rc.getLocation().directionTo(threats.enemyHQ), build);							
+				if (build != null) {			
+					trySpawn(rc.getLocation().directionTo(threats.enemyHQ), build);
+				}
 			}
 			
 			//Attack if there is an enemy in sight
@@ -109,8 +111,9 @@ public class RobotPlayer {
 							//e.printStackTrace();
 						}
 					}
-				} else
+				} else {
 					attackWeakest();
+				}
 			}
 			
 			doTransfer();
@@ -415,7 +418,7 @@ public class RobotPlayer {
 	 */
 	
 	private static boolean overwhelms() {
-		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 200 || threats.overwhelms(myLoc));
+		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 200); // || threats.overwhelms(myLoc));
 	}
 	
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
@@ -425,7 +428,7 @@ public class RobotPlayer {
 	}
 	
 	private static boolean inCombat() {
-		return sensors.enemies(SensorRange.EXTREME).length > 0 || threats.isThreatened(myLoc);
+		return rc.senseNearbyRobots(senseRange*16, enemyTeam).length > 0 || threats.isThreatened(myLoc);
 	}
 	
 	private static void tryMove(Direction preferred, boolean ignoreThreat) {
@@ -601,7 +604,7 @@ public class RobotPlayer {
 		//Move to within attack range of the nearest enemy - ignore towers and HQ until later in the game
 		//We can move in closer if we are still out of range of the enemy
 		RobotInfo nearest = null;
-		RobotInfo[] enemies = sensors.enemies(SensorRange.EXTREME);
+		RobotInfo[] enemies = rc.senseNearbyRobots(senseRange*16, enemyTeam);
 		boolean canFly = (myType == RobotType.DRONE);
 		
 		int now = Clock.getRoundNum();
@@ -813,14 +816,11 @@ public class RobotPlayer {
 	
 	// This method will attack the weakest enemy in sight
 	static boolean attackWeakest() {
-		int range = myType.attackRadiusSquared;
-		if (myType == RobotType.HQ && rc.senseTowerLocations().length >= 2)
-			range = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
-		RobotInfo[] targets = rc.senseNearbyRobots(range, enemyTeam);
+		RobotInfo[] targets = rc.senseNearbyRobots(attackRange, enemyTeam);
 		if (targets.length == 0)
 			return false;
 		
-		// Find enemy with lowest health - choose enemies that can fire first
+		// Find enemy with lowest health - pick units that can damage us as a preference
 		RobotInfo weakest = targets[0];
 		for (RobotInfo e: targets) {
 			if ((!canDamage(weakest.type) && canDamage(e.type)) ||
@@ -831,10 +831,11 @@ public class RobotPlayer {
 
 		try {
 			rc.attackLocation(weakest.location);
-		} catch (GameActionException e1) {
+		} catch (GameActionException e) {
 			System.out.println("Attack exception");
 			//e.printStackTrace();
 		}
+
 		return true;
 	}
 	
@@ -857,6 +858,7 @@ public class RobotPlayer {
 			if (rc.canSpawn(spawn, type) && rc.hasSpawnRequirements(type) && !threats.isThreatened(m)) {
 				try {
 					rc.spawn(spawn, type);
+					strategy.addUnit(type);
 				} catch (GameActionException e) {
 					System.out.println("Spawn exception");
 					//e.printStackTrace();
@@ -884,6 +886,7 @@ public class RobotPlayer {
 					!threats.isThreatened(m)) {
 				try {
 					rc.build(directions[i], type);
+					strategy.addUnit(type);
 				} catch (GameActionException e) {
 					System.out.println("Build exception");
 					//e.printStackTrace();
