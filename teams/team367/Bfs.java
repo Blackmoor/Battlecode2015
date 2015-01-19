@@ -15,14 +15,13 @@ public class Bfs {
 	private static int MAP_HEIGHT;
 	private static int MAP_WIDTH;
 	private static final int MAX_PAGES = 5;
-	private static boolean[][] isBlocked = null;
 
 	private static RobotController rc;
 	private static MapInfo map;
 
-	public Bfs(RobotController theRC, MapInfo mi) {
+	public Bfs(RobotController theRC) {
 		rc = theRC;
-		map = mi;
+		map = new MapInfo(rc); // This will cache the terrain type for each tile
 		MAP_HEIGHT = GameConstants.MAP_MAX_HEIGHT;
 		MAP_WIDTH = GameConstants.MAP_MAX_WIDTH;
 		PAGE_SIZE = MAP_WIDTH * MAP_HEIGHT;
@@ -179,62 +178,14 @@ public class Bfs {
 			qHeads[i] = i*MAX_QUEUE_SIZE;
 			qTails[i] = i*MAX_QUEUE_SIZE;
 		}
-		
-		isBlocked = new boolean[MAP_WIDTH][MAP_HEIGHT];
-		
-		/*
-		 * Map Coordinates are offset by a random number for each game and can be negative
-		 * By sensing the HQs we can work out the tile in the middle of the board
-		 */
-		MapLocation hq = rc.senseHQLocation();
-		MapLocation ehq = rc.senseEnemyHQLocation();
-		int midX = (hq.x + ehq.x) / 2;
-		int midY = (hq.y + ehq.y) / 2;
-		int maxX = midX + MAP_WIDTH / 2;
-		int maxY = midY + MAP_HEIGHT / 2;
-		int minX = maxX - MAP_WIDTH;
-		int minY = maxY - MAP_HEIGHT;
-		
-		for (int y=minY; y < maxY; y++) {
-			for (int x=minX; x < maxX; x++) {
-				TerrainTile tt = map.tile(new MapLocation(x, y));
-				isBlocked[cropX(x)][cropY(y)] = !tt.isTraversable();
-				if (tt == TerrainTile.UNKNOWN)
-					containsUnknowns = true;
-				
-				
-				switch(tt) {
-				case VOID: System.out.print("."); break;
-				case NORMAL: System.out.print(" "); break;
-				case UNKNOWN: System.out.print("?"); break;
-				case OFF_MAP: System.out.print("X"); break;
-				}
-													
-			}
-			System.out.println("");
-		}
-		
-		//HQs and towers (TODO) block movement
-		isBlocked[cropX(hq.x)][cropY(hq.y)] = true;
-		isBlocked[cropX(ehq.x)][cropY(ehq.y)] = true;
-		
+
 		processed = new boolean[MAP_WIDTH][MAP_HEIGHT];	
-		//Copy the isBlocked array as walls don't need to be processed
-		for(int i = 0; i < MAP_WIDTH; i++)
-			 System.arraycopy(isBlocked[i], 0, processed[i], 0, MAP_HEIGHT);
-		
-//		path = new Direction[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-//		for (int y=0; y<GameConstants.MAP_MAX_HEIGHT; y++)
-//			for (int x=0; x<GameConstants.MAP_MAX_WIDTH; x++)
-//				path[x][y] = Direction.NONE;
 
 		// Push dest onto queue
 		locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
 		qTails[0]++;
 		processed[cropX(dest.x)][cropY(dest.y)] = true;
 	}
-	
-
 	
 	// broadcast any changed BFS data
 
@@ -282,20 +233,25 @@ public class Bfs {
 				
 				if (!processed[x][y]) {
 					processed[x][y] = true;
+
 					MapLocation newLoc = new MapLocation(x, y);
-					// push newLoc onto queue - pick queue according to how long the move takes
-					double newDelay;
-					if (isDiagonal)
-						newDelay = diagonalDelay;
-					else
-						newDelay = moveDelay;
-					int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
-					newDelay += delay;
-					locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
-					if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
-						qTails[newQ] -= MAX_QUEUE_SIZE;
-					//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
-					publishResult(page, newLoc, dest, dirs[i], (int)newDelay);																				
+					TerrainTile t = map.tile(newLoc);
+					if (t.isTraversable()) {
+						// push newLoc onto queue - pick queue according to how long the move takes
+						double newDelay;
+						if (isDiagonal)
+							newDelay = diagonalDelay;
+						else
+							newDelay = moveDelay;
+						int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
+						newDelay += delay;
+						locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
+						if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
+							qTails[newQ] -= MAX_QUEUE_SIZE;
+						//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
+						publishResult(page, newLoc, dest, dirs[i], (int)newDelay);
+					} else if (t == TerrainTile.UNKNOWN)
+						containsUnknowns = true;
 				}
 			}
 			emptyCount = 0;
