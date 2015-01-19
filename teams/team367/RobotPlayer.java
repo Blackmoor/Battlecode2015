@@ -10,6 +10,7 @@ public class RobotPlayer {
 	static BuildStrategy strategy; //Used to determine the next build order
 	static Threats threats; //Stored the tiles threatened by the enemy towers and HQ
 	static Sensors sensors;
+	static MapInfo map;
 	static Team myTeam;
 	static Team enemyTeam;
 	static RobotType myType;
@@ -41,10 +42,11 @@ public class RobotPlayer {
 			//e.printStackTrace();
 		}
 		
+		map = new MapInfo(rc);
 		if (myType.canMove())
-			bfs = new Bfs(rc); // We need to check the breadth first search results to move optimally
+			bfs = new Bfs(rc, map); // We need to check the breadth first search results to move optimally
 		sensors = new Sensors(rc); // All these units need to sense enemies to determine if a tile is safe
-		threats = new Threats(rc, sensors);
+		threats = new Threats(rc, sensors, map);
 		
 		if (myType == RobotType.HQ)
 			runHQ();
@@ -821,8 +823,8 @@ public class RobotPlayer {
 		// Find enemy with lowest health - choose enemies that can fire first
 		RobotInfo weakest = targets[0];
 		for (RobotInfo e: targets) {
-			if ((!weakest.type.canAttack() && e.type.canAttack()) ||
-					(weakest.type.canAttack() == e.type.canAttack() && e.health < weakest.health)) {
+			if ((!canDamage(weakest.type) && canDamage(e.type)) ||
+					(canDamage(weakest.type) == canDamage(e.type) && e.health < weakest.health)) {
 				weakest = e;
 			}
 		}
@@ -834,6 +836,10 @@ public class RobotPlayer {
 			//e.printStackTrace();
 		}
 		return true;
+	}
+	
+	static boolean canDamage(RobotType r) {
+		return r.canAttack() || r == RobotType.LAUNCHER || r == RobotType.MISSILE;
 	}
 
 	// This method will attempt to spawn in the given direction (or as close to it as possible)
