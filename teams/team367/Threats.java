@@ -1,7 +1,5 @@
 package team367;
 
-import java.util.Arrays;
-
 import battlecode.common.*;
 
 /*
@@ -13,55 +11,49 @@ import battlecode.common.*;
  */
 public class Threats {
 	private RobotController rc;
-	private Sensors sensors;
 	public MapLocation enemyHQ;
-	public int enemyHQAttackRange;
 	public MapLocation[] enemyTowers;
-	private boolean[][] threatened; //true if an enemy tower or HQ threatens this tile
+	public int enemyHQAttackRange;
 	private boolean [] myTiles; //Adjacent tiles - set to 0 if the tile is safe, 1 if threatened but can retreat, 2 if threatened but retreat is pointless
 	private int[] lastUpdated; //The turn we last updated the stats for myTiles
+	private int[] weighting; // How threatening each robot type is
 	
-	public Threats(RobotController myrc, Sensors sense) {
+	public Threats(RobotController myrc) {
 		rc = myrc;
-		sensors = sense;
 		enemyHQ = rc.senseEnemyHQLocation();
 		enemyTowers = null;
 		myTiles = new boolean[Direction.values().length];
 		lastUpdated = new int[Direction.values().length];
-		Arrays.fill(lastUpdated, -1);
+		weighting = new int[RobotType.values().length];
+		for (RobotType t: RobotType.values())
+			weighting[t.ordinal()] = unitWeighting(t);
 	}
 	
 	public void update() {		
-		MapLocation[] current = rc.senseEnemyTowerLocations();
+		enemyTowers = rc.senseEnemyTowerLocations();
 		
-		if (enemyTowers == null || current.length != enemyTowers.length) {
-			enemyTowers = current;
-			if (enemyTowers.length >= 2)
-				enemyHQAttackRange = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
-			else
-				enemyHQAttackRange = RobotType.HQ.attackRadiusSquared;
-			threatened = new boolean[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-			for (MapLocation m: MapLocation.getAllMapLocationsWithinRadiusSq(enemyHQ, enemyHQAttackRange)) {
-				threatened[cropX(m.x)][cropY(m.y)] = true;
-				if (enemyTowers.length >= 5) {
-					//Add in adjacent tiles to cope with splash
-					threatened[cropX(m.x-1)][cropY(m.y-1)] = true;
-					threatened[cropX(m.x-1)][cropY(m.y)] = true;
-					threatened[cropX(m.x-1)][cropY(m.y+1)] = true;
-					threatened[cropX(m.x)][cropY(m.y-1)] = true;
-					threatened[cropX(m.x)][cropY(m.y+1)] = true;
-					threatened[cropX(m.x+1)][cropY(m.y-1)] = true;
-					threatened[cropX(m.x+1)][cropY(m.y)] = true;
-					threatened[cropX(m.x+1)][cropY(m.y+1)] = true;
-				}
-			}
-			
-			for (MapLocation t: enemyTowers) {
-				for (MapLocation m: MapLocation.getAllMapLocationsWithinRadiusSq(t, RobotType.TOWER.attackRadiusSquared)) {
-					threatened[cropX(m.x)][cropY(m.y)] = true;
-				}
-			}
+		if (enemyTowers.length >= 2)
+			enemyHQAttackRange = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
+		else
+			enemyHQAttackRange = RobotType.HQ.attackRadiusSquared;
+	}
+	
+	public boolean inHQRange(MapLocation me) {
+		if (enemyTowers.length >= 5) //Account for splash damage
+			me = me.add(me.directionTo(enemyHQ));
+		
+		if (me.distanceSquaredTo(enemyHQ) < enemyHQAttackRange)
+			return true;
+
+		return false;
+	}
+	
+	public boolean inTowerRange(MapLocation me) {
+		for (MapLocation t: enemyTowers) {
+			if (me.distanceSquaredTo(t) < RobotType.TOWER.attackRadiusSquared)
+				return true;
 		}
+		return false;
 	}
 	
 	/*
@@ -84,7 +76,7 @@ public class Threats {
 		
 		RobotType myType = rc.getType();
 		Boolean result = false; // Whether this tile is threatened by either a unit or tower or HQ
-		if (threatened[cropX(m.x)][cropY(m.y)]) {
+		if (inHQRange(m) || inTowerRange(m)) {
 			result = true;
 		} else {
 			result = false; //Assume it is safe - the code below will set it to threatened
@@ -145,8 +137,8 @@ public class Threats {
 				turns++;
 			}
 			
-			for (RobotInfo u: sensors.enemies(SensorRange.VISIBLE)) {
-				if (u.type == RobotType.MISSILE) { //Assume a missile can reach us
+			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared, rc.getTeam().opponent())) {
+				if (u.type == RobotType.MISSILE && myType == RobotType.COMMANDER) { //Assume a missile can reach us
 					result = true;
 					break;
 				}
@@ -182,15 +174,6 @@ public class Threats {
 			}
 		}
 		
-		/*
-		if (myType == RobotType.COMMANDER) {
-			if (myTiles[d.ordinal()])
-				System.out.println(d + " is threatened");
-			else
-				System.out.println(d + " is safe");
-		}
-		*/
-		
 		if (isAdjacent)
 			myTiles[d.ordinal()] = result;
 		
@@ -199,59 +182,101 @@ public class Threats {
 	
 	/*
 	 * Work out if we overwhelm the enemy in this area
+	 * Each unit type has a weighting based on its damage per round
+	 * We sum up all units in the area and multiply the weighting by its hitpoints, dividing by 2 if it has no supply
+	 * The area we consider is twice our normal sense range (4*the squared area)
+	 * Tiles in that area that we cannot see are considered to have enemy units of average value
 	 */
 	public boolean overwhelms(MapLocation myLoc) {
-		double enemyHealth = 0.0;
-		double allyHealth = 0.0;
-		RobotInfo[] units = sensors.units(SensorRange.CLOSE);
-		int senseRange = rc.getType().sensorRadiusSquared * SensorRange.CLOSE.multiplier;
+		double enemyRating = 0.0;
+		double allyRating = 0.0;
+		int senseRange = rc.getType().sensorRadiusSquared * 4;
+		RobotInfo[] units = rc.senseNearbyRobots(senseRange);
+		
+		double[] multiplier = { 1.0, 1.25, 1.25, 1.25, 2.0, 2.0, 5.0 }; //The effective Health of the HQ is affected by the number of towers
 		
 		for (MapLocation t: enemyTowers) {
-			if (t.distanceSquaredTo(myLoc) <= senseRange)
-				enemyHealth += RobotType.TOWER.maxHealth;
+			if (t.distanceSquaredTo(myLoc) <= senseRange) {
+				enemyRating += RobotType.TOWER.maxHealth * weighting[RobotType.TOWER.ordinal()];
+			}
 		}
 		
-		if (enemyHQ.distanceSquaredTo(myLoc) <= Math.max(enemyHQAttackRange, senseRange)) {
-			double[] multiplier = { 1.0, 1.25, 1.25, 1.25, 2.0, 2.0, 5.0 };
-			enemyHealth += RobotType.HQ.maxHealth * multiplier[enemyTowers.length];
+		if (enemyHQ.distanceSquaredTo(myLoc) <= Math.max(enemyHQAttackRange, senseRange)) {	
+			enemyRating += RobotType.HQ.maxHealth * multiplier[enemyTowers.length] * weighting[RobotType.HQ.ordinal()];
 		}
 		
 		//Add in myself - it is not returned in the sense data
 		if (rc.getType().canAttack() && rc.getType().canMove() && !rc.getType().canMine())
-			allyHealth += rc.getHealth();
+			allyRating += rc.getHealth() * weighting[rc.getType().ordinal()];
 		
-		//Add hp from nearby units
+		//Add rating from nearby units
 		for (RobotInfo u: units) {
 			double health = u.health;
 			if (u.type.needsSupply() && u.supplyLevel < u.type.supplyUpkeep)
 				health /= 2.0;
 			if (u.team != rc.getTeam()) {	//enemies				
 				if (u.type.canAttack()) {
-					enemyHealth += health;
+					enemyRating += health * weighting[u.type.ordinal()];
 					if (u.type == RobotType.HQ) // We already added the max HP so take it off now we know the real value 
-						enemyHealth -= RobotType.HQ.maxHealth;
+						enemyRating -= RobotType.HQ.maxHealth * multiplier[enemyTowers.length] * weighting[u.type.ordinal()];
 					if (u.type == RobotType.TOWER)
-						enemyHealth -= RobotType.TOWER.maxHealth;
+						enemyRating -= RobotType.TOWER.maxHealth * weighting[u.type.ordinal()];
 				}
 			} else { // allies
 				if (u.type.canAttack() && u.type.canMove() && !u.type.canMine())
-					allyHealth += health;
+					allyRating += health * weighting[u.type.ordinal()];
 			}
 		}
-		rc.setIndicatorString(1, "ally Health = "+allyHealth+" enemy Health = "+enemyHealth);
 		
-		return (allyHealth >= enemyHealth * 2 && allyHealth > 20);
+		//We need to take into account tiles we cannot sense at the moment
+		//We assume they are occupied by enemy units
+		/* Too Slow
+		for (MapLocation tile: MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, senseRange)) {
+			TerrainTile t = map.tile(tile);
+			switch(t) {
+			case VOID:
+				if (!rc.canSenseLocation(tile)) // Assume a drone
+					enemyRating += RobotType.DRONE.maxHealth * weighting[(RobotType.DRONE.ordinal()];
+				break;
+			case UNKNOWN:
+			case NORMAL:
+				if (!rc.canSenseLocation(tile)) // Assume a tank
+					enemyRating += RobotType.TANK.maxHealth * weighting[(RobotType.TANK.ordinal()];
+				break;
+			case OFF_MAP: //There can be nothing here
+				break;
+			}
+		}
+		*/
+		rc.setIndicatorString(1, "Turn " + Clock.getRoundNum() + " allies = "+allyRating+" enemy = "+enemyRating);
+		
+		return (allyRating >= enemyRating * 2 && allyRating > 100);
 	}
 	
-	private int cropCoord(int val, int max) {
-		return ((val % max) + max) % max;
-	}
-	
-	private int cropX(int x) {
-		return cropCoord(x, GameConstants.MAP_MAX_WIDTH);
-	}
-	
-	private int cropY(int y) {
-		return cropCoord(y, GameConstants.MAP_MAX_HEIGHT);
+	/*
+	 * Attack values based on damage per round if we constantly fire
+	 */
+	private int unitWeighting(RobotType u) {
+		switch (u) {
+		case BEAVER:
+		case MINER:
+			return 2;
+		case SOLDIER:
+		case BASHER:
+			return 4;
+		case COMMANDER:
+			return 10;
+		case TANK:
+			return 7;
+		case DRONE:
+			return 3;
+		case LAUNCHER:
+			return 10;
+		case HQ:
+			return 12;
+		case TOWER:
+			return 8;
+		}
+		return 0;
 	}
 }
