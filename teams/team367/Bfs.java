@@ -18,9 +18,11 @@ public class Bfs {
 	private static boolean[][] isBlocked = null;
 
 	private static RobotController rc;
+	private static MapInfo map;
 
-	public Bfs(RobotController theRC) {
+	public Bfs(RobotController theRC, MapInfo mi) {
 		rc = theRC;
+		map = mi;
 		MAP_HEIGHT = GameConstants.MAP_MAX_HEIGHT;
 		MAP_WIDTH = GameConstants.MAP_MAX_WIDTH;
 		PAGE_SIZE = MAP_WIDTH * MAP_HEIGHT;
@@ -193,51 +195,23 @@ public class Bfs {
 		int minX = maxX - MAP_WIDTH;
 		int minY = maxY - MAP_HEIGHT;
 		
-		/*
-		 * We don't have full map data - some tiles are unknown but we can use symmetry to fill in some blanks
-		 * The maps are either a reflection or a rotation - in most cases we can tell from the hq and tower locations
-		 * 
-		 * Reflections in the x access will have hq's with the same y coordinate
-		 * Reflections in the y access will have hq's with the same x coordinate
-		 * Assume a rotation if no reflection is found
-		 */
-		int symmentry = 0; // rotation
-		if (hq.x == ehq.x)
-			symmentry = 1; // reflection on x axis
-		else if (hq.y == ehq.y)
-			symmentry = 2; // reflection on y axis
-		
 		for (int y=minY; y < maxY; y++) {
 			for (int x=minX; x < maxX; x++) {
-				TerrainTile tt = rc.senseTerrainTile(new MapLocation(x, y));
-				if (tt == TerrainTile.UNKNOWN) {
-					switch (symmentry) {
-					case 0: //rotation
-						tt = rc.senseTerrainTile(new MapLocation(hq.x + ehq.x - x, hq.y + ehq.y - y));
-						break; 
-					case 1: // reflection on x axis
-						tt = rc.senseTerrainTile(new MapLocation(x, hq.y + ehq.y - y));
-						break;
-					case 2: // reflection on y axis
-						tt = rc.senseTerrainTile(new MapLocation(hq.x + ehq.x - x, y));
-						break;
-					}
-				}
+				TerrainTile tt = map.tile(new MapLocation(x, y));
 				isBlocked[cropX(x)][cropY(y)] = !tt.isTraversable();
 				if (tt == TerrainTile.UNKNOWN)
 					containsUnknowns = true;
 				
-				/*
+				
 				switch(tt) {
 				case VOID: System.out.print("."); break;
 				case NORMAL: System.out.print(" "); break;
 				case UNKNOWN: System.out.print("?"); break;
 				case OFF_MAP: System.out.print("X"); break;
 				}
-				*/
-									
+													
 			}
-			//System.out.println("");
+			System.out.println("");
 		}
 		
 		//HQs and towers (TODO) block movement
