@@ -97,7 +97,8 @@ public class BuildStrategy {
 			 * We only build a factory if all factories of this type are already busy building, i.e. not idle
 			 * This means production is dependent on both need and resources
 			 */
-			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && rc.senseOre(rc.getLocation()) > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && rc.senseOre(rc.getLocation()) > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+					units(RobotType.MINERFACTORY) < 1+turn/1000)
 				return RobotType.MINERFACTORY;
 			/*
 			else if (!idle(RobotType.HELIPAD) && ore > RobotType.HELIPAD.oreCost && turn+RobotType.HELIPAD.buildTurns < GameConstants.ROUND_MAX_LIMIT)
