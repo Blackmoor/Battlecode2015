@@ -57,6 +57,20 @@ public class BuildStrategy {
 		}
 	}
 	
+	public void addUnit(RobotType t) {
+		int i = t.ordinal();
+		unitCounts[i]++; // We just built one of these
+		int data = unitCounts[i] << 1;
+		if (isIdle[i])
+			data |= 1;
+		try {
+			rc.broadcast(50000+i, data);
+		} catch (GameActionException e) {
+			System.out.println("Broadcast exception");
+			//e.printStackTrace();
+		}
+	}
+	
 	private void getBroadcast() {
 		unitCounts = new int[22];
 		isIdle = new boolean[22];
