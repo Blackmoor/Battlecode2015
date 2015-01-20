@@ -114,19 +114,18 @@ public class BuildStrategy {
 			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && rc.senseOre(rc.getLocation()) > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.MINERFACTORY) < 1+turn/1000)
 				return RobotType.MINERFACTORY;
-			/*
-			else if (!idle(RobotType.HELIPAD) && ore > RobotType.HELIPAD.oreCost && turn+RobotType.HELIPAD.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < GameConstants.ROUND_MAX_LIMIT)
 				return RobotType.HELIPAD;
-			else if (turn > 500 && !idle(RobotType.AEROSPACELAB) && ore > RobotType.AEROSPACELAB.oreCost && turn+RobotType.AEROSPACELAB.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					robotCount[robotTypeToInt(RobotType.AEROSPACELAB)] < turn/200)
+			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < GameConstants.ROUND_MAX_LIMIT)
 				return RobotType.AEROSPACELAB;
-			*/
+			/*
 			else if (rc.hasBuildRequirements(RobotType.BARRACKS) && turn+RobotType.BARRACKS.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.COMMANDER) > 0 && units(RobotType.BARRACKS) < 1)
 				return RobotType.BARRACKS;
 			else if (rc.hasBuildRequirements(RobotType.TANKFACTORY) && !idle(RobotType.TANKFACTORY) && turn+RobotType.TANKFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT)
 				return RobotType.TANKFACTORY;
-			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			*/
+			else if (turn > 200 && rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.TECHNOLOGYINSTITUTE) == 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
@@ -151,9 +150,11 @@ public class BuildStrategy {
 		case BARRACKS:
 			break;
 		case HELIPAD:
+			/*
 			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.DRONE) < 20)
+					units(RobotType.DRONE)+units(RobotType.LAUNCHER) < 5)
 				return RobotType.DRONE;
+			*/
 			break;
 		case TANKFACTORY:
 			if (rc.hasSpawnRequirements(RobotType.TANK) && turn+RobotType.TANK.buildTurns < GameConstants.ROUND_MAX_LIMIT)
