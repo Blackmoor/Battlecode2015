@@ -336,7 +336,7 @@ public class RobotPlayer {
 	
 	private static void doLaunch() {
 		int count = rc.getMissileCount();
-		if (count > 0) {
+		if (count > 0 && Clock.getRoundNum() % 2 == 0) {
 			int missileRange = (2+GameConstants.MISSILE_LIFESPAN)*(2+GameConstants.MISSILE_LIFESPAN);
 			RobotInfo[] enemies = rc.senseNearbyRobots(missileRange, enemyTeam);
 			MapLocation target = null;
