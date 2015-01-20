@@ -137,7 +137,7 @@ public class Threats {
 				turns++;
 			}
 			
-			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared, rc.getTeam().opponent())) {
+			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared)) {
 				if (u.type == RobotType.MISSILE && myType == RobotType.COMMANDER) { //Assume a missile can reach us
 					result = true;
 					break;
@@ -148,7 +148,8 @@ public class Threats {
 				weapon = Math.min(0, u.weaponDelay);
 				supply = u.supplyLevel;
 				MapLocation enemyLoc = u.location;
-				if (u.type.canAttack()) {
+				Team enemyTeam = rc.getTeam().opponent();
+				if (u.team == enemyTeam && u.type.canAttack()) {
 					if (enemyLoc.distanceSquaredTo(m) <= u.type.attackRadiusSquared) { // In fire range
 						while (weapon >= 1) {
 							core = Math.max(0, core-0.5);
@@ -250,6 +251,10 @@ public class Threats {
 		*/
 		rc.setIndicatorString(1, "Turn " + Clock.getRoundNum() + " allies = "+allyRating+" enemy = "+enemyRating);
 		
+		if (isThreatened(myLoc))
+			return (allyRating >= enemyRating && allyRating > 100); //If we are threatened we stand and fight is we could win
+		
+		//If we are not threatened we only move in with 2:1 ratio in our favour.
 		return (allyRating >= enemyRating * 2 && allyRating > 100);
 	}
 	
