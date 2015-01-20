@@ -21,7 +21,7 @@ public class Bfs {
 
 	public Bfs(RobotController theRC) {
 		rc = theRC;
-		map = new MapInfo(rc); // This will cache the terrain type for each tile
+		map = null;
 		MAP_HEIGHT = GameConstants.MAP_MAX_HEIGHT;
 		MAP_WIDTH = GameConstants.MAP_MAX_WIDTH;
 		PAGE_SIZE = MAP_WIDTH * MAP_HEIGHT;
@@ -180,6 +180,8 @@ public class Bfs {
 		}
 
 		processed = new boolean[MAP_WIDTH][MAP_HEIGHT];	
+		if (map == null)
+			map = new MapInfo(rc); // This will cache the terrain type for each tile
 
 		// Push dest onto queue
 		locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
