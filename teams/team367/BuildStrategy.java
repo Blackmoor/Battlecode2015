@@ -125,7 +125,7 @@ public class BuildStrategy {
 			else if (rc.hasBuildRequirements(RobotType.TANKFACTORY) && !idle(RobotType.TANKFACTORY) && turn+RobotType.TANKFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT)
 				return RobotType.TANKFACTORY;
 			*/
-			else if (turn > 200 && rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			else if (turn > 250 && rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.TECHNOLOGYINSTITUTE) == 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
@@ -139,7 +139,7 @@ public class BuildStrategy {
 			break;
 		case MINERFACTORY:
 			if (rc.hasSpawnRequirements(RobotType.MINER) && turn+RobotType.MINER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.MINER) < Math.min(requiredMiners, units(RobotType.TANK)+20))
+					units(RobotType.MINER) < requiredMiners)
 				return RobotType.MINER;
 			break;
 		case TECHNOLOGYINSTITUTE:
