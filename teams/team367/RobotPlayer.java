@@ -359,15 +359,6 @@ public class RobotPlayer {
 					
 					if (rc.canLaunch(d)) {	
 						rc.launchMissile(d);
-						count--;
-					}
-					if (count > 0 && rc.canLaunch(d.rotateRight())) {
-						rc.launchMissile(d.rotateRight());
-						count--;
-					}
-					if (count > 0 && rc.canLaunch(d.rotateLeft())) {
-						rc.launchMissile(d.rotateLeft());
-						count--;
 					}
 				} catch (GameActionException e) {
 					System.out.println("Launch exception");
@@ -418,12 +409,14 @@ public class RobotPlayer {
 	 */
 	
 	private static boolean overwhelms() {
-		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 200); // || threats.overwhelms(myLoc));
+		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 50); // || threats.overwhelms(myLoc));
 	}
 	
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
 	// If the enemy can advance and fire before we can move away we might as well stand and fight
 	private static boolean shouldRetreat() {
+		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0)
+			return true;
 		return threats.isThreatened(myLoc);
 	}
 	
@@ -586,7 +579,7 @@ public class RobotPlayer {
 		if (rc.isCoreReady()) {
 			Direction dir = null;
 			
-			if (myType.canAttack()) {			
+			if (myType.canAttack() || myType == RobotType.LAUNCHER) {			
 				if (myType != RobotType.DRONE)
 					dir = bfs.readResult(myLoc, threats.enemyHQ);
 				if (dir == null)
@@ -618,8 +611,12 @@ public class RobotPlayer {
 			if (nearest == null || e.location.distanceSquaredTo(rc.getLocation()) < nearest.location.distanceSquaredTo(rc.getLocation()))
 				nearest = e;
 		}
+		int attackRange = myType.attackRadiusSquared;
+		if (myType == RobotType.LAUNCHER)
+			attackRange = (1+GameConstants.MISSILE_LIFESPAN)*(1+GameConstants.MISSILE_LIFESPAN);
+		
 		if (nearest != null) {
-			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > myType.attackRadiusSquared) {
+			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > attackRange) {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
 				try {
 					if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
@@ -645,21 +642,11 @@ public class RobotPlayer {
 		while (true) {
 			myLoc = rc.getLocation();			
 			int moveRange = (1+turns)*(1+turns);
-			RobotInfo[] inRange = rc.senseNearbyRobots(moveRange);
-			RobotInfo nearestEnemy = null;
-			RobotInfo nearestAlly = null;
-			for (RobotInfo u: inRange) {
-				if (u.team == myTeam) {
-					if (nearestAlly == null || myLoc.distanceSquaredTo(u.location) < myLoc.distanceSquaredTo(nearestAlly.location))
-						nearestAlly = u;
-				} else {
-					if (nearestEnemy == null || myLoc.distanceSquaredTo(u.location) < myLoc.distanceSquaredTo(nearestEnemy.location))
-						nearestEnemy = u;
-				}
-			}
-			
+			boolean towards = true;
 			MapLocation target = null;
-			if (nearestEnemy == null) { // check for towers and HQ as they might be out of sensor range
+			
+			RobotInfo[] inRange = rc.senseNearbyRobots(moveRange, enemyTeam);
+			if (inRange.length == 0) {
 				MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
 				for (MapLocation t: enemyTowers) {
 					if (myLoc.distanceSquaredTo(t) <= moveRange) {
@@ -668,11 +655,17 @@ public class RobotPlayer {
 					}
 				}
 				
-				if (target == null && myLoc.distanceSquaredTo(enemyHQ) <= moveRange) {
+				if (target == null && myLoc.distanceSquaredTo(enemyHQ) <= moveRange)
 					target = enemyHQ;
+					
+				if (target == null) {
+					inRange = rc.senseNearbyRobots(moveRange, myTeam);
+					towards = false;
+					if (inRange.length > 0)
+						target = inRange[0].location;
 				}
 			} else {
-				target = nearestEnemy.location;
+				target = inRange[0].location;
 			}
 			
 			try {
@@ -681,6 +674,8 @@ public class RobotPlayer {
 						rc.explode();
 					else {
 						Direction d = myLoc.directionTo(target);
+						if (!towards)
+							d = d.opposite();
 						if (rc.canMove(d))
 							rc.move(d);
 						else if (rc.canMove(d.rotateLeft()))
@@ -688,14 +683,6 @@ public class RobotPlayer {
 						else if (rc.canMove(d.rotateRight()))
 							rc.move(d.rotateRight());
 					}
-				} else if (nearestAlly != null) {
-					Direction d = myLoc.directionTo(nearestAlly.location).opposite();
-					if (rc.canMove(d))
-						rc.move(d);
-					else if (rc.canMove(d.rotateLeft()))
-						rc.move(d.rotateLeft());
-					else if (rc.canMove(d.rotateRight()))
-						rc.move(d.rotateRight());
 				}
 			} catch (GameActionException e) {
 				System.out.println("Missile exception");
