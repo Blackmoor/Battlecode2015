@@ -101,17 +101,17 @@ public class BuildStrategy {
 	public RobotType getBuildOrder() {		
 		int turn = Clock.getRoundNum();
 		getBroadcast();
-		
-		if (rc.getType() != RobotType.HQ && units(RobotType.BEAVER) > 0 && units(RobotType.MINERFACTORY) == 0 && !rc.hasBuildRequirements(RobotType.MINERFACTORY))
-			return null; // We need to save up to build the first miner factory
-		
+
 		switch (rc.getType()) {
 		case BEAVER:
+			double ore = rc.senseOre(rc.getLocation());
+			if (units(RobotType.MINERFACTORY) == 0 && ore > 0 && !rc.hasBuildRequirements(RobotType.MINERFACTORY))
+				return null; // Save up until we can afford a mine factory
 			/*
 			 * We only build a factory if all factories of this type are already busy building, i.e. not idle
 			 * This means production is dependent on both need and resources
 			 */
-			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && rc.senseOre(rc.getLocation()) > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && ore > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.MINERFACTORY) < 1+turn/1000)
 				return RobotType.MINERFACTORY;
 			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < GameConstants.ROUND_MAX_LIMIT)
