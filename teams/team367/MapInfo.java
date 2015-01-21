@@ -10,7 +10,6 @@ import battlecode.common.*;
  */
 public class MapInfo {
 	private TerrainTile[][] map;
-	private int[][] lastSensed;
 	private RobotController rc;
 	MapLocation hq;
 	MapLocation ehq;
@@ -28,9 +27,6 @@ public class MapInfo {
 	public MapInfo(RobotController myrc) {
 		rc = myrc;
 		map = new TerrainTile[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-		lastSensed = new int[GameConstants.MAP_MAX_WIDTH][GameConstants.MAP_MAX_HEIGHT];
-		for (int x=0; x<GameConstants.MAP_MAX_WIDTH; x++)
-			Arrays.fill(lastSensed[x], -1);
 		hq = rc.senseHQLocation();
 		ehq = rc.senseEnemyHQLocation();
 		MapLocation[] towers = rc.senseTowerLocations();
@@ -52,17 +48,18 @@ public class MapInfo {
 	}
 	
 	public TerrainTile tile(MapLocation m) {
-		int now = Clock.getRoundNum();
 		int x = cropX(m.x);
 		int y = cropY(m.y);
-		if (lastSensed[x][y] == -1 || (lastSensed[x][y] < now && map[x][y] == TerrainTile.UNKNOWN)) {
+		//Only sense the tile if we don't have a known result
+		if (map[x][y] == null || map[x][y] == TerrainTile.UNKNOWN) {
 			map[x][y] = rc.senseTerrainTile(m);
-			lastSensed[x][y] = now;
-			
-			if (map[x][y] != TerrainTile.UNKNOWN && symmetry != MapSymmetry.NONE) { //Fill in the symmetry tile too
+
+			if (map[x][y] == TerrainTile.UNKNOWN && symmetry != MapSymmetry.NONE) {
 				MapLocation opposite = transform(m, symmetry);
-				map[cropX(opposite.x)][cropY(opposite.y)] = map[x][y];
-				lastSensed[cropX(opposite.x)][cropY(opposite.y)] = now;
+				x = cropX(opposite.x);
+				y = cropY(opposite.y);
+				if (map[x][y] == null || map[x][y] == TerrainTile.UNKNOWN)
+					map[x][y] = rc.senseTerrainTile(opposite);
 			}
 		}
 		return map[x][y];
