@@ -113,7 +113,7 @@ public class Threats {
 				}				
 
 				if (u.team == enemyTeam && u.type.canAttack() && u.location.distanceSquaredTo(m) <= u.type.attackRadiusSquared) {
-					int enemyTurns = (int)u.weaponDelay;
+					int enemyTurns = Math.max(0, (int)u.weaponDelay-1);
 					suppliedTurns = (int)(u.supplyLevel/u.type.supplyUpkeep);
 					if (suppliedTurns < enemyTurns)
 						enemyTurns = 2 * enemyTurns - suppliedTurns;
