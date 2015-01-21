@@ -16,8 +16,8 @@ public class RobotPlayer {
 	static int senseRange;
 	static int attackRange;
 	static Random rand;
-	static int spawnID;
 	static MapLocation myLoc;
+	static Direction lastMove;
 	static Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST, Direction.WEST, Direction.NORTH_WEST};
 	
 	public static void run(RobotController theRC) {
@@ -34,15 +34,6 @@ public class RobotPlayer {
 		
 		if (myType == RobotType.MISSILE)
 			runMissile();
-		
-		try {
-			spawnID = rc.readBroadcast(65500);
-			rc.broadcast(65500, spawnID+1);
-			rc.setIndicatorString(0, "Spawn ID "+ spawnID);
-		} catch (GameActionException e) {
-			System.out.println("Spawn ID exception");
-			//e.printStackTrace();
-		}
 		
 		if (myType.canMove()) {
 			bfs = new Bfs(rc); // We need to check the breadth first search results to move optimally
@@ -139,21 +130,6 @@ public class RobotPlayer {
 		}
 	}
 	
-	private static boolean hasRobot(MapLocation m, RobotInfo[] allies) {
-		for (RobotInfo a: allies)
-			if (a.location.equals(m))
-				return true;
-		return false;
-	}
-	
-	private static int adjacentEnemies(MapLocation here, RobotInfo[] enemies) {
-		int count = 0;
-		for (RobotInfo e: enemies)
-			if (e.location.isAdjacentTo(here))
-				count++;
-		return count;
-	}
-	
 	private static void runTower() {
 		while(true) {
 			threats.update();
@@ -200,16 +176,13 @@ public class RobotPlayer {
 			if (rc.isCoreReady()) {
 				boolean ignoreThreat = overwhelms();
 				
-				if (!ignoreThreat && shouldRetreat())
+				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				else
+				} else if (ore == 0 || inCombat(1)) { // A miner without ore acts as a weak combat unit)
+					if (!doCloseWithEnemyMove(ignoreThreat))
+						doSearchMove();
+				} else {
 					doMinerMove();
-				if (ore == 0) { 
-					boolean engaged = false;
-					if (rc.isCoreReady() && inCombat()) // A miner without ore acts as a weak combat unit
-						engaged = doCloseWithEnemyMove(ignoreThreat);
-					if (rc.isCoreReady() && !engaged) //Close with enemy might not do a move if the enemy is a drone out of reach
-						doAdvanceMove();
 				}
 			}
 			
@@ -254,16 +227,13 @@ public class RobotPlayer {
 			if (rc.isCoreReady()) {
 				boolean ignoreThreat = overwhelms();
 				
-				if (!ignoreThreat && shouldRetreat())
+				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				else
+				} else if (ore == 0 || inCombat(1)) { // A miner without ore acts as a weak combat unit)
+					if (!doCloseWithEnemyMove(ignoreThreat))
+						doSearchMove();
+				} else {
 					doMinerMove();
-				if (ore == 0) { // A Beaver without ore acts as a weak combat unit
-					boolean engaged = false;
-					if (rc.isCoreReady() && inCombat()) // A miner without ore acts as a weak combat unit
-						engaged = doCloseWithEnemyMove(ignoreThreat);
-					if (rc.isCoreReady() && !engaged) //Close with enemy might not do a move if the enemy is a drone out of reach
-						doAdvanceMove();
 				}
 			}
 			
@@ -303,7 +273,7 @@ public class RobotPlayer {
 					doRetreatMove(); //Pull back if in range of the enemy guns
 				} else {
 					boolean engaged = false;
-					if (rc.isCoreReady() && inCombat())
+					if (rc.isCoreReady() && inCombat(16))
 						engaged = doCloseWithEnemyMove(ignoreThreat);
 					if (rc.isCoreReady() && !engaged) //Close with enemy might not do a move if the enemy is a drone out of reach
 						doAdvanceMove();
@@ -438,8 +408,8 @@ public class RobotPlayer {
 		return threats.isThreatened(myLoc);
 	}
 	
-	private static boolean inCombat() {
-		return rc.senseNearbyRobots(senseRange*16, enemyTeam).length > 0 || threats.isThreatened(myLoc);
+	private static boolean inCombat(int multiplier) {
+		return rc.senseNearbyRobots(senseRange*multiplier, enemyTeam).length > 0 || threats.isThreatened(myLoc);
 	}
 	
 	private static void tryMove(Direction preferred, boolean ignoreThreat) {
@@ -496,18 +466,6 @@ public class RobotPlayer {
 		}
 	}
 	
-	private static RobotInfo nearestUnit(RobotInfo[] units) {
-		if (units.length == 0)
-			return null;
-		
-		RobotInfo nearest = units[0];
-		for (RobotInfo r: units) {
-			if (myLoc.distanceSquaredTo(r.location) < myLoc.distanceSquaredTo(nearest.location))
-				nearest = r;
-		}
-		return nearest;
-	}
-	
 	/*
 	 * If there are no good moves we should stay and fight
 	 */
@@ -523,6 +481,33 @@ public class RobotPlayer {
 			System.out.println("Retreat exception");
 			//e.printStackTrace();
 		}					
+	}
+	
+	/*
+	 * Beavers and miners without ore do this
+	 */
+	private static void doSearchMove() {
+		//We keep moving in the direction we were going
+		//When blocked we turn left or right depending on our unique ID
+		
+		if (lastMove == null)
+			lastMove = directions[rand.nextInt(directions.length)];
+		
+		Direction startDir = lastMove;
+		while (!rc.canMove(lastMove)) {
+			if (rc.getID() % 2 == 0)
+				lastMove = lastMove.rotateLeft();
+			else
+				lastMove = lastMove.rotateRight();
+			if (lastMove == startDir) //We are trapped
+				return;
+		}
+		try {
+			rc.move(lastMove);
+		} catch (GameActionException e) {
+			System.out.println("Move exception");
+			//e.printStackTrace();
+		}
 	}
 	
 	private static void flashTowards(MapLocation m, boolean ignoreThreat) {
@@ -611,6 +596,10 @@ public class RobotPlayer {
 		}
 	}
 	
+	/*
+	 * Moves towards the nearest enemy
+	 * Returns true if we moved or are in the right place
+	 */
 	private static boolean doCloseWithEnemyMove(boolean ignoreThreat) {
 		//Move to within attack range of the nearest enemy - ignore towers and HQ until later in the game
 		//We can move in closer if we are still out of range of the enemy
@@ -861,8 +850,8 @@ public class RobotPlayer {
 		while (offsetIndex < 8) {
 			int i = (dirint+offsets[offsetIndex]+8)%8;
 			Direction spawn = directions[i];
-			MapLocation m = myLoc.add(directions[i]);
-			if (rc.canSpawn(spawn, type) && rc.hasSpawnRequirements(type) && !threats.isThreatened(m)) {
+
+			if (rc.canSpawn(spawn, type) && rc.hasSpawnRequirements(type)) {
 				try {
 					rc.spawn(spawn, type);
 					strategy.addUnit(type);
