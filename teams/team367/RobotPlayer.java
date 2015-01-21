@@ -89,30 +89,47 @@ public class RobotPlayer {
 			
 			//Attack if there is an enemy in sight
 			if (rc.isWeaponReady()) {
-				if (rc.senseTowerLocations().length >= 5) { // we do splash damage so look for best target based on how many enemies we can hit
-					RobotInfo[] enemies = rc.senseNearbyRobots(52, enemyTeam); //This is slightly larger than the real range but does include all possible enemies that can be hit with splash
-					RobotInfo[] allies = rc.senseNearbyRobots(GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED, myTeam);
-					MapLocation best = null;
-					int most = 0;
-					for (MapLocation m: MapLocation.getAllMapLocationsWithinRadiusSq(myLoc, GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED)) {
-						if (!hasRobot(m, allies)) {
-							int count = adjacentEnemies(m, enemies);
-							if (count > most) {
-								most = count;
-								best = m;
-							}
-						}
-					}
-					if (best != null) {
-						try {
-							rc.attackLocation(best);
-						} catch (GameActionException e) {
-							System.out.println("HQ attack exception");
-							//e.printStackTrace();
-						}
-					}
+				int senseRange = RobotType.HQ.attackRadiusSquared;
+				MapLocation[] myTowers = rc.senseTowerLocations();
+				if (myTowers.length >= 5) {
+					senseRange = 52; //This is slightly larger than the real range but does include all possible enemies that can be hit with splash
+					attackRange = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
+				} else if (myTowers.length >= 2) {
+					attackRange = GameConstants.HQ_BUFFED_ATTACK_RADIUS_SQUARED;
 				} else {
-					attackWeakest();
+					attackRange = senseRange;
+				}
+				RobotInfo[] enemies = rc.senseNearbyRobots(senseRange, enemyTeam);
+				//Pick the first valid target
+				MapLocation best = null;
+				for (RobotInfo e: enemies) {
+					int range = e.location.distanceSquaredTo(myLoc);
+					if (range <= attackRange) {
+						best = e.location;
+						break;
+					}
+					if (myTowers.length >= 5) { //Check for tiles adjacent to the enemy as they might be in splash range
+						Direction d = e.location.directionTo(myLoc);
+						if (e.location.add(d).distanceSquaredTo(myLoc) <= attackRange) {
+							best = e.location.add(d);
+							break;
+						}
+						if (e.location.add(d.rotateLeft()).distanceSquaredTo(myLoc) <= attackRange) {
+							best = e.location.add(d.rotateLeft());
+							break;
+						}if (e.location.add(d.rotateRight()).distanceSquaredTo(myLoc) <= attackRange) {
+							best = e.location.add(d.rotateRight());
+							break;
+						}
+					}
+				}
+				if (best != null) {
+					try {
+						rc.attackLocation(best);
+					} catch (GameActionException e) {
+						System.out.println("HQ attack exception");
+						//e.printStackTrace();
+					}
 				}
 			}
 			
@@ -180,7 +197,7 @@ public class RobotPlayer {
 			double ore = rc.senseOre(rc.getLocation());
 	
 			//Move if we can and want to
-			if (rc.isCoreReady() && myType.canMove()) {
+			if (rc.isCoreReady()) {
 				boolean ignoreThreat = overwhelms();
 				
 				if (!ignoreThreat && shouldRetreat())
@@ -224,13 +241,14 @@ public class RobotPlayer {
 		while(true) {
 			threats.update();
 			myLoc = rc.getLocation();
-			double ore = rc.senseOre(rc.getLocation());
 			
 			if (rc.isCoreReady()) {
 				RobotType build = strategy.getBuildOrder();
 				if (build != null)
-					tryBuild(rc.getLocation().directionTo(threats.enemyHQ), build);							
+					tryBuild(rc.getLocation().directionTo(threats.enemyHQ), build);
 			}
+			
+			double ore = rc.senseOre(rc.getLocation());
 			
 			//Move if we can and want to
 			if (rc.isCoreReady()) {
@@ -409,7 +427,7 @@ public class RobotPlayer {
 	 */
 	
 	private static boolean overwhelms() {
-		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 50); // || threats.overwhelms(myLoc));
+		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 50 && myType.canAttack()); // || threats.overwhelms(myLoc));
 	}
 	
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
@@ -542,12 +560,12 @@ public class RobotPlayer {
 		Direction startDir = directions[rand.nextInt(directions.length)];
 		Direction d = startDir;
 		Direction best = Direction.NONE;
-		double mostOre = ore;
+		double mostOre = ore*2; //Only move if there is twice as much ore
 		boolean done = false;
 		while (!done) {
 			if (rc.canMove(d)) {
 				MapLocation adj = rc.getLocation().add(d);
-				if (!threats.isThreatened(adj) && rc.senseOre(adj) > mostOre) {
+				if (rc.senseOre(adj) > mostOre && !threats.isThreatened(adj)) {
 					mostOre = rc.senseOre(adj);
 					best = d;
 				}
@@ -555,7 +573,7 @@ public class RobotPlayer {
 			d = d.rotateRight();
 			done = (d == startDir);
 		}
-		if (best != Direction.NONE && mostOre > ore*2) {
+		if (best != Direction.NONE) {
 			rc.setIndicatorString(2, "Mining - better ore " + d);
 			try {
 				rc.move(best);
@@ -636,33 +654,36 @@ public class RobotPlayer {
 	}
 	
 	private static void runMissile() {
-		int turns = GameConstants.MISSILE_LIFESPAN;
+		int turns;
+		int lastTurn = Clock.getRoundNum() + GameConstants.MISSILE_LIFESPAN;
 		MapLocation enemyHQ = rc.senseEnemyHQLocation();
 		
 		while (true) {
-			myLoc = rc.getLocation();			
-			int moveRange = (1+turns)*(1+turns);
+			myLoc = rc.getLocation();
+			turns = lastTurn - Clock.getRoundNum();
+			int damageRange = (1+turns)*(1+turns);
 			boolean towards = true;
 			MapLocation target = null;
 			
-			RobotInfo[] inRange = rc.senseNearbyRobots(moveRange, enemyTeam);
-			if (inRange.length == 0) {
-				MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
-				for (MapLocation t: enemyTowers) {
-					if (myLoc.distanceSquaredTo(t) <= moveRange) {
-						target = t;
-						break;
-					}
-				}
-				
-				if (target == null && myLoc.distanceSquaredTo(enemyHQ) <= moveRange)
+			RobotInfo[] inRange = rc.senseNearbyRobots(damageRange, enemyTeam);
+			if (inRange.length == 0) {				
+				if (target == null && myLoc.distanceSquaredTo(enemyHQ) <= damageRange) {
 					target = enemyHQ;
-					
-				if (target == null) {
-					inRange = rc.senseNearbyRobots(moveRange, myTeam);
-					towards = false;
-					if (inRange.length > 0)
-						target = inRange[0].location;
+				} else {	
+					MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
+					for (MapLocation t: enemyTowers) {
+						if (myLoc.distanceSquaredTo(t) <= damageRange) {
+							target = t;
+							break;
+						}
+					}
+						
+					if (target == null) { //No targets - move away from allies
+						inRange = rc.senseNearbyRobots(damageRange, myTeam);
+						towards = false;
+						if (inRange.length > 0)
+							target = inRange[0].location;
+					}
 				}
 			} else {
 				target = inRange[0].location;
@@ -688,7 +709,6 @@ public class RobotPlayer {
 				System.out.println("Missile exception");
 				//e.printStackTrace();
 			}
-			turns--;
 			rc.yield();
 		}
 	}

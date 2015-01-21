@@ -85,91 +85,41 @@ public class Threats {
 			//We might be able to move in, fire and move out before they act
 			double core = rc.getCoreDelay();
 			double weapon = rc.getWeaponDelay();
-			double moveCost = (myLoc.directionTo(m).isDiagonal())?GameConstants.DIAGONAL_DELAY_MULTIPLIER:1;
 			double supply = rc.getSupplyLevel();
 			int turns = 0;
 					
-			if (!myLoc.equals(m)) {
-				//Factor in move
-				while (core >= 1) {
-					core = Math.max(0, core-0.5);
-					weapon = Math.max(0, weapon-0.5);
-					if (supply > myType.supplyUpkeep) {
-						supply -= myType.supplyUpkeep;
-						core = Math.max(0, core-0.5);
-						weapon = Math.max(0, weapon-0.5);
-					} else {
-						supply = 0;
-					}
-					turns++;
-				}
-	
-				weapon = Math.max(myType.loadingDelay, weapon);
-				core += moveCost*myType.movementDelay;
+			if (!myLoc.equals(m)) { //We need to move here first
+				double moveCost = (myLoc.directionTo(m).isDiagonal())?GameConstants.DIAGONAL_DELAY_MULTIPLIER:1;
+				turns = (int)core;
+				core += myType.movementDelay*moveCost - turns;
 			} else { // Consider it safe if we have time to fire here and still move away
-				while (weapon >= 1) {
-					core = Math.max(0, core-0.5);
-					weapon = Math.max(0, weapon-0.5);
-					if (supply > myType.supplyUpkeep) {
-						supply -= myType.supplyUpkeep;
-						core = Math.max(0, core-0.5);
-						weapon = Math.max(0, weapon-0.5);
-					} else {
-						supply = 0;
-					}
-					turns++;
-				}
-				core = Math.max(myType.cooldownDelay, core);
-				weapon += myType.attackDelay;
+				turns = (int)weapon;
+				core = Math.max(myType.cooldownDelay, core - turns);
 			}
 			
 			//Move away
-			while (core >= 1) {
-				core = Math.max(0, core-0.5);
-				weapon = Math.max(0, weapon-0.5);
-				if (supply > myType.supplyUpkeep) {
-					supply -= myType.supplyUpkeep;
-					core = Math.max(0, core-0.5);
-					weapon = Math.max(0, weapon-0.5);
-				} else {
-					supply = 0;
-				}
-				turns++;
-			}
+			turns += (int)core;
 			
+			//Work out if we have supply for that many turns
+			int suppliedTurns = (int)(supply/myType.supplyUpkeep);
+			if (suppliedTurns < turns) //We run out of supply
+				turns = 2 * turns - suppliedTurns;
+			
+			Team enemyTeam = rc.getTeam().opponent();
 			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared)) {
-				if (u.type == RobotType.MISSILE && myType == RobotType.COMMANDER) { //Assume a missile can reach us
+				if (u.type == RobotType.MISSILE && myType == RobotType.COMMANDER) { //Assume a missile can reach us, even ours!
 					result = true;
 					break;
-				}
-				// Can an enemy fire from where it is, or can it advance and then fire before us?
-				int enemyTurns = 0;
-				core = Math.min(0, u.coreDelay);
-				weapon = Math.min(0, u.weaponDelay);
-				supply = u.supplyLevel;
-				MapLocation enemyLoc = u.location;
-				Team enemyTeam = rc.getTeam().opponent();
-				if (u.team == enemyTeam && u.type.canAttack()) {
-					if (enemyLoc.distanceSquaredTo(m) <= u.type.attackRadiusSquared) { // In fire range
-						while (weapon >= 1) {
-							core = Math.max(0, core-0.5);
-							weapon = Math.max(0, weapon-0.5);
-							if (supply > u.type.supplyUpkeep) {
-								supply -= u.type.supplyUpkeep;
-								core = Math.max(0, core-0.5);
-								weapon = Math.max(0, weapon-0.5);
-							} else {
-								supply = 0;
-							}
-							enemyTurns++;
-						}
-						core = Math.max(u.type.cooldownDelay, core);
-						weapon += u.type.attackDelay;
-						
-						if (enemyTurns <= turns) {
-							result = true;
-							break;
-						}
+				}				
+
+				if (u.team == enemyTeam && u.type.canAttack() && u.location.distanceSquaredTo(m) <= u.type.attackRadiusSquared) {
+					int enemyTurns = (int)u.weaponDelay;
+					suppliedTurns = (int)(u.supplyLevel/u.type.supplyUpkeep);
+					if (suppliedTurns < enemyTurns)
+						enemyTurns = 2 * enemyTurns - suppliedTurns;
+					if (enemyTurns <= turns) {
+						result = true;
+						break;
 					}
 				}
 			}
