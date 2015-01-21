@@ -173,15 +173,54 @@ public class Bfs {
 	private static void initQueue(MapLocation dest) {
 		locQueues = new int[MAX_QUEUE_SIZE*NUM_QUEUES]; //data is xxxxxxxxyyyyyyyyaaaaaaaaaaaaaaaa (x, y coord, a = 10*number of action delays (dist))
 		currentQ = 0;
-		containsUnknowns = false; // If we find tiles that are unknown we remember so we can restart the process later on
+		containsUnknowns = true;
 		for (int i=0; i<NUM_QUEUES; i++) {
 			qHeads[i] = i*MAX_QUEUE_SIZE;
 			qTails[i] = i*MAX_QUEUE_SIZE;
 		}
 
 		processed = new boolean[MAP_WIDTH][MAP_HEIGHT];	
+		//Mark each void tile as processed
+		/*
+		 * Map Coordinates are offset by a random number for each game and can be negative
+		 * By sensing the HQs we can work out the tile in the middle of the board
+		 */
+		MapLocation hq = rc.senseHQLocation();
+		MapLocation ehq = rc.senseEnemyHQLocation();
+		int midX = (hq.x + ehq.x) / 2;
+		int midY = (hq.y + ehq.y) / 2;
+		int maxX = midX + MAP_WIDTH / 2;
+		int maxY = midY + MAP_HEIGHT / 2;
+		int minX = maxX - MAP_WIDTH;
+		int minY = maxY - MAP_HEIGHT;
+		
 		if (map == null)
 			map = new MapInfo(rc); // This will cache the terrain type for each tile
+		
+		for (int y=minY; y < maxY; y++) {
+			for (int x=minX; x < maxX; x++) {
+				TerrainTile t = map.tile(new MapLocation(x,y));
+				processed[cropX(x)][cropY(y)] = !t.isTraversable();
+				/*
+				switch(t) {
+				case UNKNOWN:
+					System.out.printf("?");
+					break;
+				case NORMAL:
+					System.out.printf(" ");
+					break;
+				case VOID:
+					System.out.printf("*");
+					break;
+				case OFF_MAP:
+					System.out.printf("X");
+					break;
+				}
+				*/
+			}
+			//System.out.println("");
+		}
+
 
 		// Push dest onto queue
 		locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
@@ -237,23 +276,19 @@ public class Bfs {
 					processed[x][y] = true;
 
 					MapLocation newLoc = new MapLocation(x, y);
-					TerrainTile t = map.tile(newLoc);
-					if (t.isTraversable()) {
-						// push newLoc onto queue - pick queue according to how long the move takes
-						double newDelay;
-						if (isDiagonal)
-							newDelay = diagonalDelay;
-						else
-							newDelay = moveDelay;
-						int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
-						newDelay += delay;
-						locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
-						if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
-							qTails[newQ] -= MAX_QUEUE_SIZE;
-						//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
-						publishResult(page, newLoc, dest, dirs[i], (int)newDelay);
-					} else if (t == TerrainTile.UNKNOWN)
-						containsUnknowns = true;
+					// push newLoc onto queue - pick queue according to how long the move takes
+					double newDelay;
+					if (isDiagonal)
+						newDelay = diagonalDelay;
+					else
+						newDelay = moveDelay;
+					int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
+					newDelay += delay;
+					locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
+					if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
+						qTails[newQ] -= MAX_QUEUE_SIZE;
+					//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
+					publishResult(page, newLoc, dest, dirs[i], (int)newDelay);
 				}
 			}
 			emptyCount = 0;
@@ -264,6 +299,7 @@ public class Bfs {
 			if (emptyCount == NUM_QUEUES) {	
 				/*
 				 * DEBUG to show route
+				 *
 				System.out.print("Cleanser BFS to " + dest + ", page " + page+ " completed on round " + Clock.getRoundNum() +"\n");
 				MapLocation m = rc.senseHQLocation().add(Direction.NORTH);
 				Direction d = readResult(m, rc.senseEnemyHQLocation());				
@@ -272,7 +308,7 @@ public class Bfs {
 					m = m.add(d);
 					d = readResult(m, rc.senseEnemyHQLocation());
 				}
-				*/
+				*/				
 				break;
 			}
 		}
@@ -309,7 +345,7 @@ public class Bfs {
 	}
 
 	// Soldiers call this to get pathing directions
-	public Direction readResult(MapLocation here, MapLocation dest) {
+	public static Direction readResult(MapLocation here, MapLocation dest) {
 		for (int page = 0; page < NUM_PAGES; page++) {
 			int data;
 			try {
