@@ -125,8 +125,8 @@ public class BuildStrategy {
 			else if (rc.hasBuildRequirements(RobotType.TANKFACTORY) && !idle(RobotType.TANKFACTORY) && turn+RobotType.TANKFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT)
 				return RobotType.TANKFACTORY;
 			*/
-			else if (turn > 250 && rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.TECHNOLOGYINSTITUTE) == 0)
+			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+					units(RobotType.TECHNOLOGYINSTITUTE) == 0 && units(RobotType.AEROSPACELAB) > 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
 					units(RobotType.TRAININGFIELD) == 0)
@@ -171,7 +171,7 @@ public class BuildStrategy {
 			break;
 		case HQ: //We need more beavers to build factories if we have spare ore
 			if (rc.hasSpawnRequirements(RobotType.BEAVER) && turn+RobotType.BEAVER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.BEAVER) < Math.max(1, Math.min(requiredMiners, turn/80)))
+					units(RobotType.BEAVER) < (turn+300)/200)
 				return RobotType.BEAVER;
 			break;
 		default:
