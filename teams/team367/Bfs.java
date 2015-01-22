@@ -48,45 +48,46 @@ public class Bfs {
 	// If such a free page exists, we can work on it.
 
 	// metadata format: stored in binary
-	// fpprrrrxxyy
+	// ufpprrrrxxyy
+	// u = contains unknowns or not (1 bit)
 	// f = finished or not (1 bit)
 	// pp = priority (2 bits)
-	// rrrr = round last updated (11bits)
+	// rrrr = round last updated (12bits)
 	// xx = dest x coordinate (8 bits)
 	// yy = dest y coordinate (8 bits)
-	private static void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished) throws GameActionException {
+	private void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished) throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
-		int data = (containsUnknowns ? 1<<30 : 0) | (finished ? 1<<29 : 0) | ((priority & 0x3) << 27) | (roundLastUpdated << 16) | (cropX(dest.x) << 8) | cropY(dest.y);
+		int data = (containsUnknowns ? 1<<31 : 0) | (finished ? 1<<30 : 0) | ((priority & 0x3) << 28) | (roundLastUpdated << 16) | (cropX(dest.x) << 8) | cropY(dest.y);
 		rc.broadcast(channel, data);
 	}
 
-	private static boolean getMetadataIsFinished(int metadata) {
-		return (metadata & (1<<29)) != 0;
+	private boolean getMetadataIsFinished(int metadata) {
+		return (metadata & (1<<30)) != 0;
 	}
 	
-	private static boolean getMetadataIsComplete(int metadata) {
-		return (metadata & (1<<30)) == 0;
+	private boolean getMetadataIsComplete(int metadata) {
+		return (metadata & (1<<31)) == 0;
 	}
 
-	private static int getMetadataPriority(int metadata) {
-		return (metadata >> 27) & 0x3;
+	private int getMetadataPriority(int metadata) {
+		return (metadata >> 28) & 0x3;
 	}
 
-	private static int getMetadataRoundLastUpdated(int metadata) {
-		return (metadata >> 16) & 0x7ff;
+	private int getMetadataRoundLastUpdated(int metadata) {
+		return (metadata >> 16) & 0xfff;
 	}
 
-	private static MapLocation getMetadataDestination(int metadata) {
+	private MapLocation getMetadataDestination(int metadata) {
 		return new MapLocation((metadata>>8)& 0xff, metadata & 0xff);
 	}
 
-	private static int readPageMetadata(int page) throws GameActionException {
+	private int readPageMetadata(int page) throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
 		int data = rc.readBroadcast(channel);
 		return data;
 	}
 
-	private static int findFreePage(MapLocation dest, int priority) throws GameActionException {
+	private int findFreePage(MapLocation dest, int priority) throws GameActionException {
 		// see if we can reuse a page we used before
 		if (dest.equals(previousDest) && previousPage != -1) {
 			int previousPageMetadata = readPageMetadata(previousPage);
@@ -106,7 +107,6 @@ public class Bfs {
 				}
 			}
 		}
-
 		
 		// Check to see if anyone else is working on this destination. If so, don't bother doing anything.
 		// But as we loop over pages, look for the page that hasn't been touched in the longest time
@@ -158,7 +158,6 @@ public class Bfs {
 	private static int[] qHeads = new int[NUM_QUEUES]; //The index into the locQueue for the head of this queue
 	private static int[] qTails = new int[NUM_QUEUES]; //The index into the locQueue for the tail of this queue
 	private static boolean[][] processed = null; //Set to true when the location is put into 1 of the BFS queues
-//	private static Direction[][] path = null; //Filled in when we determine a direction - the master copy is broadcast, this is just for debug
 
 	private static Direction[] dirs = new Direction[] { Direction.NORTH_WEST, Direction.SOUTH_WEST, Direction.SOUTH_EAST, Direction.NORTH_EAST,
 			Direction.NORTH, Direction.WEST, Direction.SOUTH, Direction.EAST };
@@ -170,80 +169,45 @@ public class Bfs {
 	private static int previousPage = -1;
 
 	// initialize the BFS algorithm
-	private static void initQueue(MapLocation dest) {
+	private void initQueue(MapLocation dest) {
+		processed = new boolean[MAP_WIDTH][MAP_HEIGHT];
 		locQueues = new int[MAX_QUEUE_SIZE*NUM_QUEUES]; //data is xxxxxxxxyyyyyyyyaaaaaaaaaaaaaaaa (x, y coord, a = 10*number of action delays (dist))
 		currentQ = 0;
-		containsUnknowns = true;
+		containsUnknowns = false;
 		for (int i=0; i<NUM_QUEUES; i++) {
 			qHeads[i] = i*MAX_QUEUE_SIZE;
 			qTails[i] = i*MAX_QUEUE_SIZE;
 		}
-
-		processed = new boolean[MAP_WIDTH][MAP_HEIGHT];	
-		//Mark each void tile as processed
-		/*
-		 * Map Coordinates are offset by a random number for each game and can be negative
-		 * By sensing the HQs we can work out the tile in the middle of the board
-		 */
-		MapLocation hq = rc.senseHQLocation();
-		MapLocation ehq = rc.senseEnemyHQLocation();
-		int midX = (hq.x + ehq.x) / 2;
-		int midY = (hq.y + ehq.y) / 2;
-		int maxX = midX + MAP_WIDTH / 2;
-		int maxY = midY + MAP_HEIGHT / 2;
-		int minX = maxX - MAP_WIDTH;
-		int minY = maxY - MAP_HEIGHT;
 		
 		if (map == null)
 			map = new MapInfo(rc); // This will cache the terrain type for each tile
-		
-		for (int y=minY; y < maxY; y++) {
-			for (int x=minX; x < maxX; x++) {
-				TerrainTile t = map.tile(new MapLocation(x,y));
-				processed[cropX(x)][cropY(y)] = !t.isTraversable();
-				/*
-				switch(t) {
-				case UNKNOWN:
-					System.out.printf("?");
-					break;
-				case NORMAL:
-					System.out.printf(" ");
-					break;
-				case VOID:
-					System.out.printf("*");
-					break;
-				case OFF_MAP:
-					System.out.printf("X");
-					break;
-				}
-				*/
-			}
-			//System.out.println("");
-		}
-
 
 		// Push dest onto queue
 		locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
 		qTails[0]++;
 		processed[cropX(dest.x)][cropY(dest.y)] = true;
 	}
-	
-	// broadcast any changed BFS data
 
-	// HQ or TOWERs calls this function to spend spare bytecodes computing paths for soldiers
-	public void work(MapLocation dest, int priority, int stopWhen) throws GameActionException {
-
-		int page = findFreePage(dest, priority);
-		if (page == -1) {
-			return; // We can't do any work, or don't have to
+	// Computers calls this function to spend spare bytecodes computing paths for other units
+	// Returns true if the work is done
+	public boolean work(MapLocation dest, int priority, int stopWhen) {
+		try {
+			int page = findFreePage(dest, priority);
+			if (page == -1) {
+				return true; // We can't do any work, or don't have to
+			}
+			return doWork(dest, priority, stopWhen, page);
+		} catch (GameActionException e) {
+			System.out.println("Bfs exception");
+			//e.printStackTrace();
 		}
-		doWork(dest, priority, stopWhen, page);
+		return false;
 	}
 	
-	private static void doWork(MapLocation dest, int priority, int stopWhen, int page) throws GameActionException {
+	private boolean doWork(MapLocation dest, int priority, int stopWhen, int page) throws GameActionException {
 		if (!dest.equals(previousDest)) {
 			initQueue(dest);
-			//System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
+			System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
 		}
 
 		previousDest = dest;
@@ -256,7 +220,7 @@ public class Bfs {
 			currentQ = (currentQ + 1) % NUM_QUEUES;
 		}
 		if (emptyCount == NUM_QUEUES)
-			return; //Finished
+			return true; //Finished
 		
 		while (Clock.getBytecodesLeft() > stopWhen) {			
 			// pop a location from the queue
@@ -274,21 +238,25 @@ public class Bfs {
 				
 				if (!processed[x][y]) {
 					processed[x][y] = true;
-
-					MapLocation newLoc = new MapLocation(x, y);
-					// push newLoc onto queue - pick queue according to how long the move takes
-					double newDelay;
-					if (isDiagonal)
-						newDelay = diagonalDelay;
-					else
-						newDelay = moveDelay;
-					int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
-					newDelay += delay;
-					locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
-					if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
-						qTails[newQ] -= MAX_QUEUE_SIZE;
-					//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
-					publishResult(page, newLoc, dest, dirs[i], (int)newDelay);
+					TerrainTile t = map.tile(x, y);
+					
+					if (t.isTraversable()) {
+						MapLocation newLoc = new MapLocation(x, y);
+						// push newLoc onto queue - pick queue according to how long the move takes
+						double newDelay;
+						if (isDiagonal)
+							newDelay = diagonalDelay;
+						else
+							newDelay = moveDelay;
+						int newQ = (currentQ + (int)(newDelay + (delay % 1))) % NUM_QUEUES;
+						newDelay += delay;
+						locQueues[qTails[newQ]] = (x << 24) | (y << 16) | (int)(newDelay*10);
+						if (++qTails[newQ] % MAX_QUEUE_SIZE == 0)
+							qTails[newQ] -= MAX_QUEUE_SIZE;
+						//System.out.print("Adding " + x + ", " + y + " to queue " + newQ + " element " + qTails[newQ] + "\n");
+						publishResult(page, newLoc, dest, dirs[i], (int)newDelay);
+					} else if (t == TerrainTile.UNKNOWN)
+						containsUnknowns = true;
 				}
 			}
 			emptyCount = 0;
@@ -297,26 +265,16 @@ public class Bfs {
 				currentQ = (currentQ + 1) % NUM_QUEUES;
 			}
 			if (emptyCount == NUM_QUEUES) {	
-				/*
-				 * DEBUG to show route
-				 *
-				System.out.print("Cleanser BFS to " + dest + ", page " + page+ " completed on round " + Clock.getRoundNum() +"\n");
-				MapLocation m = rc.senseHQLocation().add(Direction.NORTH);
-				Direction d = readResult(m, rc.senseEnemyHQLocation());				
-				while (d != null) {
-					System.out.println(d);
-					m = m.add(d);
-					d = readResult(m, rc.senseEnemyHQLocation());
-				}
-				*/				
+				//map.dump();
 				break;
 			}
 		}
 		
 		writePageMetadata(page, previousRoundWorked, dest, priority, (emptyCount == NUM_QUEUES));
+		return (emptyCount == NUM_QUEUES && containsUnknowns == false);
 	}
 
-	private static int locChannel(int page, MapLocation loc) {
+	private int locChannel(int page, MapLocation loc) {
 		return PAGE_SIZE * page + MAP_HEIGHT * cropX(loc.x) + cropY(loc.y);
 	}
 
@@ -327,7 +285,7 @@ public class Bfs {
 	// a = actions (turns) to move here
 	// x = x coordinate of destination
 	// y = y coordinate of destination
-	private static void publishResult(int page, MapLocation here, MapLocation dest, Direction dir, int actions) {
+	private void publishResult(int page, MapLocation here, MapLocation dest, Direction dir, int actions) {
 		int data = 0x80;
 		data |= dir.ordinal();
 		data <<= 8;
@@ -345,7 +303,7 @@ public class Bfs {
 	}
 
 	// Soldiers call this to get pathing directions
-	public static Direction readResult(MapLocation here, MapLocation dest) {
+	public Direction readResult(MapLocation here, MapLocation dest) {
 		for (int page = 0; page < NUM_PAGES; page++) {
 			int data;
 			try {
@@ -372,18 +330,18 @@ public class Bfs {
 	}
 	
 	// Coords are offset by a large amount and can be negative
-	private static int cropX(int w) {
+	private int cropX(int w) {
 		return crop(w, MAP_WIDTH);
 	}
 	
-	private static int cropY(int h) {
+	private int cropY(int h) {
 		return crop(h, MAP_HEIGHT);
 	}
-	private static int crop(int c, int m) {
+	private int crop(int c, int m) {
 		return ((c % m) + m) % m;
 	}
 	
-	private static boolean cropSame(MapLocation a, MapLocation b) {
+	private boolean cropSame(MapLocation a, MapLocation b) {
 		return (cropX(a.x) == cropX(b.x) && cropY(a.y)== cropY(b.y));
 	}
 }
