@@ -1,7 +1,5 @@
 package team367;
 
-import java.util.Arrays;
-
 import battlecode.common.*;
 
 /*
@@ -13,6 +11,11 @@ public class MapInfo {
 	private RobotController rc;
 	MapLocation hq;
 	MapLocation ehq;
+	//As we discover the edges of the map, these values are filled in.
+	int	minY;
+	int minX;
+	int maxY;
+	int maxX;
 	
 	private enum MapSymmetry {
 		NONE,
@@ -45,6 +48,34 @@ public class MapInfo {
 			symmetry = MapSymmetry.REFLECT_BACKSLASH;
 		else
 			symmetry = MapSymmetry.NONE;
+		
+		// Work out known bounds of map
+		minY = Math.min(hq.y, ehq.y);
+		maxY = Math.max(hq.y, ehq.y);
+		minX = Math.min(hq.x, ehq.x);
+		maxX = Math.max(hq.x, ehq.x);
+		
+		for (MapLocation m: towers) {
+			if (m.x < minX)
+				minX = m.x;
+			if (m.x > maxX)
+				maxX = m.x;
+			if (m.y < minY)
+				minY = m.y;
+			if (m.y > maxY)
+				maxY = m.y;
+		}
+		for (MapLocation m: enemy) {
+			if (m.x < minX)
+				minX = m.x;
+			if (m.x > maxX)
+				maxX = m.x;
+			if (m.y < minY)
+				minY = m.y;
+			if (m.y > maxY)
+				maxY = m.y;
+		}
+		//System.out.println("Map initialised: Symmetry " + symmetry + " TopLeft " + minX + "," + minY + " BottomRight " + maxX + "," + maxY);
 	}
 	
 	public TerrainTile tile(MapLocation m) {
@@ -54,15 +85,73 @@ public class MapInfo {
 		if (map[x][y] == null || map[x][y] == TerrainTile.UNKNOWN) {
 			map[x][y] = rc.senseTerrainTile(m);
 
-			if (map[x][y] == TerrainTile.UNKNOWN && symmetry != MapSymmetry.NONE) {
+			if (map[x][y] == TerrainTile.OFF_MAP) {
+				if (m.x < minX)
+					minX = m.x;
+				if (m.x > maxX)
+					maxX = m.x;
+				if (m.y < minY)
+					minY = m.y;
+				if (m.y > maxY)
+					maxY = m.y;
+			}
+			if (symmetry != MapSymmetry.NONE) {
 				MapLocation opposite = transform(m, symmetry);
-				x = cropX(opposite.x);
-				y = cropY(opposite.y);
-				if (map[x][y] == null || map[x][y] == TerrainTile.UNKNOWN)
-					map[x][y] = rc.senseTerrainTile(opposite);
+				int ox = cropX(opposite.x);
+				int oy = cropY(opposite.y);
+			
+				if (map[x][y] == TerrainTile.UNKNOWN) {
+					if (map[ox][oy] == null || map[ox][oy] == TerrainTile.UNKNOWN)
+						map[ox][oy] = rc.senseTerrainTile(opposite);
+					map[x][y] = map[ox][oy];
+				} else {
+					map[ox][oy] = map[x][y];
+				}
+				
+				if (map[ox][oy] == TerrainTile.OFF_MAP) {
+					if (opposite.x < minX)
+						minX = opposite.x;
+					if (opposite.x > maxX)
+						maxX = opposite.x;
+					if (opposite.y < minY)
+						minY = opposite.y;
+					if (opposite.y > maxY)
+						maxY = opposite.y;
+				}
 			}
 		}
 		return map[x][y];
+	}
+	
+	public TerrainTile tile(int x, int y) {
+		int mx = x + (hq.x/GameConstants.MAP_MAX_WIDTH)*GameConstants.MAP_MAX_WIDTH;
+		int my = y + (hq.y/GameConstants.MAP_MAX_HEIGHT)*GameConstants.MAP_MAX_HEIGHT;
+
+		while (mx > maxX)
+			mx -= GameConstants.MAP_MAX_WIDTH;
+		while (my > maxY)
+			my -= GameConstants.MAP_MAX_HEIGHT;
+		//System.out.println("Mapping " + x + "," + y + " to " + mx + "," + my);
+		return tile(new MapLocation(mx, my));
+	}
+	
+	public void dump() {
+		System.out.println("Map dump: Symmetry " + symmetry + " TopLeft " + minX + "," + minY + " BottomRight " + maxX + "," + maxY);
+		for (int y=minY; y <= maxY; y++) {
+			int cy = cropY(y);
+			for (int x=minX; x <= maxX; x++) {
+				int cx = cropX(x);
+				if (map[cx][cy] == null || map[cx][cy] == TerrainTile.UNKNOWN)
+					System.out.printf("?");
+				else if (map[cx][cy] == null || map[cx][cy] == TerrainTile.NORMAL)
+					System.out.printf(" ");
+				else if (map[cx][cy] == null || map[cx][cy] == TerrainTile.VOID)
+					System.out.printf("*");
+				else if (map[cx][cy] == null || map[cx][cy] == TerrainTile.OFF_MAP)
+					System.out.printf("X");
+			}
+			System.out.println("");
+		}
 	}
 	
 	private MapLocation transform(MapLocation m, MapSymmetry s) {
