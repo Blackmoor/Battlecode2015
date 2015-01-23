@@ -18,6 +18,7 @@ public class RobotPlayer {
 	static Random rand;
 	static MapLocation myLoc;
 	static Direction lastMove;
+	static int maxRounds; // The number of turns in the game - can change according to the map size
 	static Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST, Direction.WEST, Direction.NORTH_WEST};
 	
 	public static void run(RobotController theRC) {
@@ -31,6 +32,7 @@ public class RobotPlayer {
 		myLoc = rc.getLocation();
 		senseRange = myType.sensorRadiusSquared;
 		attackRange = myType.attackRadiusSquared;
+		maxRounds = rc.getRoundLimit();
 		
 		if (myType == RobotType.MISSILE)
 			runMissile();
@@ -273,7 +275,7 @@ public class RobotPlayer {
 					doRetreatMove(); //Pull back if in range of the enemy guns
 				} else {
 					boolean engaged = false;
-					if (rc.isCoreReady() && inCombat(16))
+					if (rc.isCoreReady() && inCombat(4))
 						engaged = doCloseWithEnemyMove(ignoreThreat);
 					if (rc.isCoreReady() && !engaged) //Close with enemy might not do a move if the enemy is a drone out of reach
 						doAdvanceMove();
@@ -294,6 +296,7 @@ public class RobotPlayer {
 	
 	// Computers
 	private static void runOther() {
+		int numTowers = -1;
 		while(true) {
 			threats.update();
 			myLoc = rc.getLocation();
@@ -309,28 +312,29 @@ public class RobotPlayer {
 			doTransfer();
 			
 			//Perform a background breadth first search to the enemy HQ
-			if (myType == RobotType.COMPUTER && Clock.getBytecodesLeft() > 1000) {
-				try {
-					bfs.work(threats.enemyHQ, Bfs.PRIORITY_HIGH, 500);
-				} catch (GameActionException e) {
-					System.out.println("Pathfinding exception");
-					//e.printStackTrace();
-				}
+			if (myType == RobotType.COMPUTER && Clock.getBytecodesLeft() > 1000) {		
+				bfs.work(threats.enemyHQ, Bfs.PRIORITY_HIGH, 1000, numTowers != threats.enemyTowers.length);
 			}
-
+			numTowers = threats.enemyTowers.length;
 			rc.yield();
 		}
 	}
 	
+	// Launch a missile if there is an enemy in sight.
+	// We ignore other missiles
 	private static void doLaunch() {
 		int count = rc.getMissileCount();
 		if (count > 0 && Clock.getRoundNum() % 2 == 0) {
 			int missileRange = (2+GameConstants.MISSILE_LIFESPAN)*(2+GameConstants.MISSILE_LIFESPAN);
 			RobotInfo[] enemies = rc.senseNearbyRobots(missileRange, enemyTeam);
 			MapLocation target = null;
-			if (enemies.length > 0)
-				target = enemies[0].location;
-			else { //Check for towers or HQ
+			for (RobotInfo r: enemies) {
+				if (r.type != RobotType.MISSILE) {
+					target = r.location;
+					break;
+				}
+			}
+			if (target == null) { //Check for towers or HQ
 				for (MapLocation t: threats.enemyTowers) {
 					if (t.distanceSquaredTo(myLoc) <= missileRange) {
 						target = t;
@@ -362,7 +366,7 @@ public class RobotPlayer {
 			double supply = rc.getSupplyLevel();
 			double supplyToKeep = myType.supplyUpkeep*10; // 10 turns worth of supply
 			if (myType == RobotType.COMMANDER)
-				supplyToKeep = (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum()) * myType.supplyUpkeep; // Keep enough to last to the end of the game
+				supplyToKeep = (maxRounds - Clock.getRoundNum()) * myType.supplyUpkeep; // Keep enough to last to the end of the game
 			if (supply > supplyToKeep) {		
 				RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.SUPPLY_TRANSFER_RADIUS_SQUARED, myTeam);			
 				//Pass to first neighbour with half the supply we have
@@ -397,7 +401,7 @@ public class RobotPlayer {
 	 */
 	
 	private static boolean overwhelms() {
-		return (GameConstants.ROUND_MAX_LIMIT - Clock.getRoundNum() < 50 && myType.canAttack()); // || threats.overwhelms(myLoc));
+		return (maxRounds - Clock.getRoundNum() < 50 && myType.canAttack()); // || threats.overwhelms(myLoc));
 	}
 	
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
@@ -569,7 +573,7 @@ public class RobotPlayer {
 		}
 	}
 
-	// Move towards to enemy HQ if we can attack, otherwise head to home HQ
+	// Move towards enemy HQ if we can attack
 	private static void doAdvanceMove() {
 		try {
 			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
@@ -582,7 +586,7 @@ public class RobotPlayer {
 		if (rc.isCoreReady()) {
 			Direction dir = null;
 			
-			if (myType.canAttack() || myType == RobotType.LAUNCHER) {			
+			if (myType.canAttack() || myType == RobotType.LAUNCHER) {
 				if (myType != RobotType.DRONE)
 					dir = bfs.readResult(myLoc, threats.enemyHQ);
 				if (dir == null)
@@ -609,10 +613,10 @@ public class RobotPlayer {
 		
 		int now = Clock.getRoundNum();
 		for (RobotInfo e: enemies) {
-			//We want to find and circle units, not towers or HQ (until later in the game)
-			//Drone on VOID tiles cannot be reached by ground troops - ignore them
-			if (now < GameConstants.ROUND_MAX_LIMIT/2 && (e.type == RobotType.HQ || e.type == RobotType.TOWER))
+			//We want to find and circle units, not towers or HQ (until later in the game)			
+			if (now < maxRounds/2 && (e.type == RobotType.HQ || e.type == RobotType.TOWER))
 				continue;
+			//Drones on VOID tiles cannot be reached by ground troops - ignore them
 			if (!canFly && rc.senseTerrainTile(e.location) != TerrainTile.NORMAL)
 				continue;
 			if (nearest == null || e.location.distanceSquaredTo(rc.getLocation()) < nearest.location.distanceSquaredTo(rc.getLocation()))
@@ -623,6 +627,7 @@ public class RobotPlayer {
 			attackRange = (1+GameConstants.MISSILE_LIFESPAN)*(1+GameConstants.MISSILE_LIFESPAN);
 		
 		if (nearest != null) {
+			attackRange = Math.min(attackRange, nearest.type.attackRadiusSquared); //Close to either our attack range or his - whichever is closer
 			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > attackRange) {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
 				try {
@@ -643,44 +648,53 @@ public class RobotPlayer {
 	}
 	
 	private static void runMissile() {
-		int turns;
 		int lastTurn = Clock.getRoundNum() + GameConstants.MISSILE_LIFESPAN;
-		MapLocation enemyHQ = rc.senseEnemyHQLocation();
+		MapLocation target = null;
+		boolean targetMoves = true;
 		
 		while (true) {
 			myLoc = rc.getLocation();
-			turns = lastTurn - Clock.getRoundNum();
+			int turns = lastTurn - Clock.getRoundNum();
 			int damageRange = (1+turns)*(1+turns);
 			boolean towards = true;
-			MapLocation target = null;
 			
-			RobotInfo[] inRange = rc.senseNearbyRobots(damageRange, enemyTeam);
-			if (inRange.length == 0) {				
-				if (target == null && myLoc.distanceSquaredTo(enemyHQ) <= damageRange) {
-					target = enemyHQ;
-				} else {	
-					MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
-					for (MapLocation t: enemyTowers) {
-						if (myLoc.distanceSquaredTo(t) <= damageRange) {
-							target = t;
-							break;
+			if (targetMoves) {
+				RobotInfo[] inRange = rc.senseNearbyRobots(damageRange, enemyTeam);
+				if (inRange.length == 0) {
+					MapLocation enemyHQ = rc.senseEnemyHQLocation();
+					if (myLoc.distanceSquaredTo(enemyHQ) <= damageRange) {
+						target = enemyHQ;
+						targetMoves = false;
+						rc.setIndicatorString(0, "Missile targetting HQ @" + target);
+					} else {	
+						MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
+						for (MapLocation t: enemyTowers) {
+							if (myLoc.distanceSquaredTo(t) <= damageRange) {
+								target = t;
+								targetMoves = false;
+								rc.setIndicatorString(0, "Missile targetting Tower @" + target);
+								break;
+							}
+						}							
+						if (target == null) { //No targets - move away from allies
+							inRange = rc.senseNearbyRobots(damageRange, myTeam);
+							towards = false;
+							if (inRange.length > 0) {
+								target = inRange[0].location;
+								rc.setIndicatorString(0, "Missile targetting " + inRange[0].type + " @" + target);
+							}
 						}
 					}
-						
-					if (target == null) { //No targets - move away from allies
-						inRange = rc.senseNearbyRobots(damageRange, myTeam);
-						towards = false;
-						if (inRange.length > 0)
-							target = inRange[0].location;
-					}
+				} else {
+					target = inRange[0].location;
+					targetMoves = inRange[0].type.canMove();
+					rc.setIndicatorString(0, "Missile targetting " + inRange[0].type + "@" + target);
 				}
-			} else {
-				target = inRange[0].location;
 			}
 			
 			try {
 				if (target != null) {
-					if (myLoc.distanceSquaredTo(target) <= GameConstants.MISSILE_RADIUS_SQUARED)
+					if (towards && myLoc.distanceSquaredTo(target) <= GameConstants.MISSILE_RADIUS_SQUARED)
 						rc.explode();
 					else {
 						Direction d = myLoc.directionTo(target);
