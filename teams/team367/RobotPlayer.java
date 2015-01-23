@@ -586,7 +586,7 @@ public class RobotPlayer {
 		if (rc.isCoreReady()) {
 			Direction dir = null;
 			
-			if (myType.canAttack() || myType == RobotType.LAUNCHER) {
+			if (myType.canAttack() || (myType == RobotType.LAUNCHER && Clock.getRoundNum() > 550)) {
 				if (myType != RobotType.DRONE)
 					dir = bfs.readResult(myLoc, threats.enemyHQ);
 				if (dir == null)
@@ -627,7 +627,6 @@ public class RobotPlayer {
 			attackRange = (1+GameConstants.MISSILE_LIFESPAN)*(1+GameConstants.MISSILE_LIFESPAN);
 		
 		if (nearest != null) {
-			attackRange = Math.min(attackRange, nearest.type.attackRadiusSquared); //Close to either our attack range or his - whichever is closer
 			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > attackRange) {
 				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
 				try {
@@ -651,43 +650,47 @@ public class RobotPlayer {
 		int lastTurn = Clock.getRoundNum() + GameConstants.MISSILE_LIFESPAN;
 		MapLocation target = null;
 		boolean targetMoves = true;
+		boolean towards = true;
 		
 		while (true) {
 			myLoc = rc.getLocation();
 			int turns = lastTurn - Clock.getRoundNum();
 			int damageRange = (1+turns)*(1+turns);
-			boolean towards = true;
 			
 			if (targetMoves) {
 				RobotInfo[] inRange = rc.senseNearbyRobots(damageRange, enemyTeam);
-				if (inRange.length == 0) {
+				if (inRange.length == 0) { //No units to target
 					MapLocation enemyHQ = rc.senseEnemyHQLocation();
-					if (myLoc.distanceSquaredTo(enemyHQ) <= damageRange) {
+					if (myLoc.distanceSquaredTo(enemyHQ) <= damageRange) { //Check for HQ
 						target = enemyHQ;
 						targetMoves = false;
+						towards = true;
 						rc.setIndicatorString(0, "Missile targetting HQ @" + target);
-					} else {	
+					} else { //Check for towers
 						MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
 						for (MapLocation t: enemyTowers) {
 							if (myLoc.distanceSquaredTo(t) <= damageRange) {
 								target = t;
 								targetMoves = false;
+								towards = true;
 								rc.setIndicatorString(0, "Missile targetting Tower @" + target);
 								break;
 							}
 						}							
 						if (target == null) { //No targets - move away from allies
 							inRange = rc.senseNearbyRobots(damageRange, myTeam);
-							towards = false;
 							if (inRange.length > 0) {
 								target = inRange[0].location;
-								rc.setIndicatorString(0, "Missile targetting " + inRange[0].type + " @" + target);
+								towards = false;
+								targetMoves = inRange[0].type.canMove();
+								rc.setIndicatorString(0, "Missile retreating from " + inRange[0].type + " @" + target);
 							}
 						}
 					}
 				} else {
 					target = inRange[0].location;
 					targetMoves = inRange[0].type.canMove();
+					towards = true;
 					rc.setIndicatorString(0, "Missile targetting " + inRange[0].type + "@" + target);
 				}
 			}
