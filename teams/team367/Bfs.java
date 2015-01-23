@@ -87,19 +87,18 @@ public class Bfs {
 		return data;
 	}
 
-	private int findFreePage(MapLocation dest, int priority) throws GameActionException {
+	private int findFreePage(MapLocation dest, int priority, boolean restart) throws GameActionException {
 		// see if we can reuse a page we used before
 		if (dest.equals(previousDest) && previousPage != -1) {
 			int previousPageMetadata = readPageMetadata(previousPage);
 			if (getMetadataRoundLastUpdated(previousPageMetadata) == previousRoundWorked) {
 				MapLocation where = getMetadataDestination(previousPageMetadata);
 				if (where.x == cropX(dest.x) && where.y == cropY(dest.y) ) {
-					if (getMetadataIsFinished(previousPageMetadata)) {
+					if (! restart && getMetadataIsFinished(previousPageMetadata)) {
 						if (getMetadataIsComplete(previousPageMetadata))
 							return -1; // we're done! don't do any work!
 						//Restart the search with more up to data map info
 						initQueue(dest);
-						//System.out.print("Restart BFS to " + dest + ", page " + previousPage+ ", start round " + Clock.getRoundNum() + "\n");
 						return previousPage;
 					} else {
 						return previousPage;
@@ -182,21 +181,32 @@ public class Bfs {
 		if (map == null)
 			map = new MapInfo(rc); // This will cache the terrain type for each tile
 
-		// Push dest onto queue
-		locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
-		qTails[0]++;
-		processed[cropX(dest.x)][cropY(dest.y)] = true;
+		// Push dest onto queue - if we have supplied the enemyHQ use this to mean all enemy towers and HQ
+		if (dest.equals(rc.senseEnemyHQLocation())) {
+			MapLocation ehq = rc.senseEnemyHQLocation();
+			locQueues[0] = (cropX(ehq.x) << 24) | (cropY(ehq.y)<< 16);
+			qTails[0]++;
+			processed[cropX(ehq.x)][cropY(ehq.y)] = true;
+			for (MapLocation t: rc.senseEnemyTowerLocations()) {
+				locQueues[qTails[0]++] = (cropX(t.x) << 24) | (cropY(t.y)<< 16);
+				processed[cropX(t.x)][cropY(t.y)] = true;
+			}
+		} else {
+			locQueues[0] = (cropX(dest.x) << 24) | (cropY(dest.y) << 16);
+			qTails[0]++;
+			processed[cropX(dest.x)][cropY(dest.y)] = true;
+		}
 	}
 
 	// Computers calls this function to spend spare bytecodes computing paths for other units
 	// Returns true if the work is done
-	public boolean work(MapLocation dest, int priority, int stopWhen) {
+	public boolean work(MapLocation dest, int priority, int stopWhen, boolean restart) {
 		try {
-			int page = findFreePage(dest, priority);
+			int page = findFreePage(dest, priority, restart);
 			if (page == -1) {
 				return true; // We can't do any work, or don't have to
 			}
-			return doWork(dest, priority, stopWhen, page);
+			return doWork(dest, priority, stopWhen, page, restart);
 		} catch (GameActionException e) {
 			System.out.println("Bfs exception");
 			//e.printStackTrace();
@@ -204,8 +214,8 @@ public class Bfs {
 		return false;
 	}
 	
-	private boolean doWork(MapLocation dest, int priority, int stopWhen, int page) throws GameActionException {
-		if (!dest.equals(previousDest)) {
+	private boolean doWork(MapLocation dest, int priority, int stopWhen, int page, boolean restart) throws GameActionException {
+		if (!dest.equals(previousDest) || restart) {
 			initQueue(dest);
 			System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
 		}
