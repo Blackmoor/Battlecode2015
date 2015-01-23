@@ -141,7 +141,7 @@ public class BuildStrategy {
 			break;
 		case MINERFACTORY:
 			if (rc.hasSpawnRequirements(RobotType.MINER) && turn+RobotType.MINER.buildTurns < maxRounds &&
-					units(RobotType.MINER) < requiredMiners)
+					units(RobotType.MINER) < Math.min(units(RobotType.LAUNCHER)+20, requiredMiners))
 				return RobotType.MINER;
 			break;
 		case TECHNOLOGYINSTITUTE:
