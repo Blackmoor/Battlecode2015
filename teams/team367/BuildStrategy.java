@@ -12,11 +12,13 @@ public class BuildStrategy {
 	private boolean[] isIdle; //Set to true if a building of this type is not actively building
 	private int requiredTowers; // The number of supply towers we need to support the units
 	private int requiredMiners; // The number of miners we need to support all the factories and beavers we have
+	private int maxRounds; // The turn on which the game will end
 	
 	public BuildStrategy(RobotController myrc) {
 		rc = myrc;
 		requiredTowers = 0;
 		requiredMiners = 0;
+		maxRounds = rc.getRoundLimit();
 	}
 	
 	public void broadcast() {
@@ -111,66 +113,68 @@ public class BuildStrategy {
 			 * We only build a factory if all factories of this type are already busy building, i.e. not idle
 			 * This means production is dependent on both need and resources
 			 */
-			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && ore > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && ore > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < maxRounds &&
 					units(RobotType.MINERFACTORY) < 1+turn/1000)
 				return RobotType.MINERFACTORY;
-			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < maxRounds &&
+					units(RobotType.HELIPAD) == 0)
 				return RobotType.HELIPAD;
-			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < maxRounds)
 				return RobotType.AEROSPACELAB;
 			/*
-			else if (rc.hasBuildRequirements(RobotType.BARRACKS) && turn+RobotType.BARRACKS.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.COMMANDER) > 0 && units(RobotType.BARRACKS) < 1)
+			else if (rc.hasBuildRequirements(RobotType.BARRACKS) && !idle(RobotType.BARRACKS) && turn+RobotType.BARRACKS.buildTurns < maxRounds)
 				return RobotType.BARRACKS;
-			else if (rc.hasBuildRequirements(RobotType.TANKFACTORY) && !idle(RobotType.TANKFACTORY) && turn+RobotType.TANKFACTORY.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			else if (rc.hasBuildRequirements(RobotType.TANKFACTORY) && !idle(RobotType.TANKFACTORY) && turn+RobotType.TANKFACTORY.buildTurns < maxRounds)
 				return RobotType.TANKFACTORY;
 			*/
-			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < maxRounds &&
 					units(RobotType.TECHNOLOGYINSTITUTE) == 0 && units(RobotType.AEROSPACELAB) > 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
-			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < maxRounds &&
 					units(RobotType.TRAININGFIELD) == 0)
 				return RobotType.TRAININGFIELD;
-			else if (turn > 1800 && rc.hasBuildRequirements(RobotType.HANDWASHSTATION) && turn+RobotType.HANDWASHSTATION.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			else if (maxRounds - turn < 200 && rc.hasBuildRequirements(RobotType.HANDWASHSTATION) && turn+RobotType.HANDWASHSTATION.buildTurns < maxRounds)
 				return RobotType.HANDWASHSTATION;
-			else if (rc.hasBuildRequirements(RobotType.SUPPLYDEPOT) && turn+RobotType.SUPPLYDEPOT.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			else if (rc.hasBuildRequirements(RobotType.SUPPLYDEPOT) && turn+RobotType.SUPPLYDEPOT.buildTurns < maxRounds &&
 					units(RobotType.SUPPLYDEPOT) < Math.min(30, requiredTowers))
 				return RobotType.SUPPLYDEPOT;
 			break;
 		case MINERFACTORY:
-			if (rc.hasSpawnRequirements(RobotType.MINER) && turn+RobotType.MINER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasSpawnRequirements(RobotType.MINER) && turn+RobotType.MINER.buildTurns < maxRounds &&
 					units(RobotType.MINER) < requiredMiners)
 				return RobotType.MINER;
 			break;
 		case TECHNOLOGYINSTITUTE:
-			if (turn > 600 && rc.hasSpawnRequirements(RobotType.COMPUTER) && turn+RobotType.COMPUTER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
-					units(RobotType.COMPUTER) == 0)
+			if (turn > 600 && rc.hasSpawnRequirements(RobotType.COMPUTER) && turn+RobotType.COMPUTER.buildTurns < maxRounds &&
+					units(RobotType.COMPUTER) < 1)
 				return RobotType.COMPUTER;
 			break;
 		case BARRACKS:
+			if (rc.hasSpawnRequirements(RobotType.SOLDIER) && turn+RobotType.SOLDIER.buildTurns < maxRounds &&
+					units(RobotType.SOLDIER) + units(RobotType.TANK) < 20)
+				return RobotType.SOLDIER;
 			break;
 		case HELIPAD:
-			/*
-			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < maxRounds &&
 					units(RobotType.DRONE)+units(RobotType.LAUNCHER) < 5)
 				return RobotType.DRONE;
-			*/
 			break;
 		case TANKFACTORY:
-			if (rc.hasSpawnRequirements(RobotType.TANK) && turn+RobotType.TANK.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			if (rc.hasSpawnRequirements(RobotType.TANK) && turn+RobotType.TANK.buildTurns < maxRounds &&
+					units(RobotType.TANK) + units(RobotType.LAUNCHER) < 30)
 				return RobotType.TANK;
 			break;
 		case TRAININGFIELD:
-			if (rc.hasSpawnRequirements(RobotType.COMMANDER) && turn+RobotType.COMMANDER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasSpawnRequirements(RobotType.COMMANDER) && turn+RobotType.COMMANDER.buildTurns < maxRounds &&
 					units(RobotType.COMMANDER) == 0)
 				return RobotType.COMMANDER;
 			break;
 		case AEROSPACELAB:
-			if (rc.hasSpawnRequirements(RobotType.LAUNCHER) && turn+RobotType.LAUNCHER.buildTurns < GameConstants.ROUND_MAX_LIMIT)
+			if (rc.hasSpawnRequirements(RobotType.LAUNCHER) && turn+RobotType.LAUNCHER.buildTurns < maxRounds)
 				return RobotType.LAUNCHER;
 			break;
 		case HQ: //We need more beavers to build factories if we have spare ore
-			if (rc.hasSpawnRequirements(RobotType.BEAVER) && turn+RobotType.BEAVER.buildTurns < GameConstants.ROUND_MAX_LIMIT &&
+			if (rc.hasSpawnRequirements(RobotType.BEAVER) && turn+RobotType.BEAVER.buildTurns < maxRounds &&
 					units(RobotType.BEAVER) < (turn+300)/200)
 				return RobotType.BEAVER;
 			break;
