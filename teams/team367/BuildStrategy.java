@@ -156,7 +156,7 @@ public class BuildStrategy {
 			break;
 		case HELIPAD:
 			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < maxRounds &&
-					units(RobotType.DRONE)+units(RobotType.LAUNCHER) < 5)
+					units(RobotType.DRONE)+units(RobotType.LAUNCHER) < 1)
 				return RobotType.DRONE;
 			break;
 		case TANKFACTORY:
