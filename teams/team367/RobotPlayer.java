@@ -20,6 +20,10 @@ public class RobotPlayer {
 	static Direction lastMove;
 	static int maxRounds; // The number of turns in the game - can change according to the map size
 	static Direction[] directions = {Direction.NORTH, Direction.NORTH_EAST, Direction.EAST, Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST, Direction.WEST, Direction.NORTH_WEST};
+	static Direction moveDir; // Drones use this as the preferred move direction
+	static int droneMoveMax; // Drones move this many tiles before switching direction
+	static int droneMoveCurrent; // How many turns before we change direction
+	static boolean patrolClockwise;
 	
 	public static void run(RobotController theRC) {
 		rc = theRC;
@@ -52,6 +56,8 @@ public class RobotPlayer {
 			runBeaver();
 		else if (myType.canMine())
 			runMiner(); // Includes Beavers
+		else if (myType == RobotType.DRONE)
+			runDrone();
 		else if (myType.canAttack() || myType == RobotType.LAUNCHER)
 			runCombat();
 		else
@@ -165,6 +171,37 @@ public class RobotPlayer {
 		}
 	}
 	
+	//Drones
+	private static void runDrone() {
+		moveDir = Direction.NORTH;
+		droneMoveCurrent = droneMoveMax = 3;
+		patrolClockwise = true;
+		
+		while(true) {
+			threats.update();
+			myLoc = rc.getLocation();
+			
+			//Attack if there is an enemy in sight
+			if (rc.isWeaponReady())
+				attackWeakest();
+			
+			//Move if we can and want to
+			if (rc.isCoreReady()) {
+				if (shouldRetreat()) {
+					doRetreatMove(); //Pull back if in range of the enemy guns
+				} else if (Clock.getRoundNum() < 600) {
+					doPatrol();
+				} else {
+					doSupply();
+				}
+			}
+			
+			doTransfer();
+			
+			rc.yield();
+		}
+	}
+	
 	// Miners
 	private static void runMiner() {
 		rand = new Random(rc.getID());
@@ -172,25 +209,24 @@ public class RobotPlayer {
 		while(true) {
 			threats.update();
 			myLoc = rc.getLocation();
-			double ore = rc.senseOre(rc.getLocation());
-	
+			double ore = rc.senseOre(rc.getLocation());	
+			
+			//Attack if there is an enemy in sight
+			if (rc.isWeaponReady())
+				attackWeakest();
+			
 			//Move if we can and want to
 			if (rc.isCoreReady()) {
 				boolean ignoreThreat = overwhelms();
 				
 				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				} else if (ore == 0 || inCombat(1)) { // A miner without ore acts as a weak combat unit)
-					if (!doCloseWithEnemyMove(ignoreThreat))
-						doSearchMove();
+				} else if (ore == 0) {
+					doSearchMove();
 				} else {
 					doMinerMove();
 				}
 			}
-			
-			//Attack if there is an enemy in sight
-			if (rc.isWeaponReady())
-				attackWeakest();
 			
 			//Mine if possible
 			if (rc.isCoreReady() && ore > 0) {
@@ -223,6 +259,11 @@ public class RobotPlayer {
 					tryBuild(rc.getLocation().directionTo(threats.enemyHQ), build);
 			}
 			
+			
+			//Attack if there is an enemy in sight
+			if (rc.isWeaponReady())
+				attackWeakest();
+			
 			double ore = rc.senseOre(rc.getLocation());
 			
 			//Move if we can and want to
@@ -231,17 +272,12 @@ public class RobotPlayer {
 				
 				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				} else if (ore == 0 || inCombat(1)) { // A miner without ore acts as a weak combat unit)
-					if (!doCloseWithEnemyMove(ignoreThreat))
-						doSearchMove();
+				} else if (ore == 0) {
+					doSearchMove();
 				} else {
 					doMinerMove();
 				}
 			}
-			
-			//Attack if there is an enemy in sight
-			if (rc.isWeaponReady())
-				attackWeakest();
 			
 			//Mine if possible
 			if (rc.isCoreReady() && ore > 0) {
@@ -390,6 +426,64 @@ public class RobotPlayer {
 	}
 	
 	/*
+	 * Head towards the nearest tile that we haven't sensed before
+	 * If there is a tie, pick the one nearest to the hq
+	 */
+	private static void doPatrol() {
+		if (--droneMoveCurrent <= 0) {
+			if (patrolClockwise)
+				moveDir = moveDir.rotateRight();
+			else
+				moveDir = moveDir.rotateLeft();
+			if (moveDir == Direction.NORTH)
+				droneMoveMax += 3;
+			droneMoveCurrent = droneMoveMax;
+		}
+		
+		while (true) {
+			try {
+				if (rc.canMove(moveDir) && !threats.isThreatened(myLoc.add(moveDir))) {					
+					rc.move(moveDir);
+					break;
+				} else if (rc.canMove(moveDir.rotateLeft()) && !threats.isThreatened(myLoc.add(moveDir.rotateLeft()))) {
+					rc.move(moveDir.rotateLeft());
+					break;
+				} else if (rc.canMove(moveDir.rotateRight()) && !threats.isThreatened(myLoc.add(moveDir.rotateRight()))) {
+					rc.move(moveDir.rotateRight());
+					break;
+				} else {
+					moveDir = moveDir.opposite();
+					patrolClockwise = !patrolClockwise;
+					if (moveDir == Direction.NORTH)
+						droneMoveMax += 3;
+					droneMoveCurrent = droneMoveMax;
+				}
+			} catch (GameActionException e) {
+				System.out.println("Drone patrol exception");
+				//e.printStackTrace();
+			}
+		}
+	}
+	
+	/*
+	 * Drones without supply head back to the HQ
+	 * Drones with supply head to the nearest unit without supply
+	 */
+	private static void doSupply() {
+		if (rc.getSupplyLevel() == 0)
+			tryMove(myLoc.directionTo(myHQ), false);
+		else {
+			RobotInfo[] units = rc.senseNearbyRobots(Integer.MAX_VALUE, myTeam);
+			for (RobotInfo r: units) {
+				if (r.supplyLevel == 0 && !r.type.isBuilding) {
+					tryMove(myLoc.directionTo(r.location), false);
+					break;
+				}
+			}
+		}
+	}
+	
+	/*
 	 * MOVEMENT code
 	 * 
 	 * These functions determine how best to move
@@ -401,13 +495,13 @@ public class RobotPlayer {
 	 */
 	
 	private static boolean overwhelms() {
-		return (maxRounds - Clock.getRoundNum() < 50 && myType.canAttack()); // || threats.overwhelms(myLoc));
+		return false; //(myType.canAttack() && threats.overwhelms(myLoc));
 	}
 	
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
 	// If the enemy can advance and fire before we can move away we might as well stand and fight
 	private static boolean shouldRetreat() {
-		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0 && rc.getSupplyLevel() == 0)
+		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0)
 			return true;
 		return threats.isThreatened(myLoc);
 	}

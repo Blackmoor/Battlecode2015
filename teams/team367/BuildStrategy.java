@@ -106,15 +106,14 @@ public class BuildStrategy {
 
 		switch (rc.getType()) {
 		case BEAVER:
-			double ore = rc.senseOre(rc.getLocation());
-			if (units(RobotType.MINERFACTORY) == 0 && ore > 0 && !rc.hasBuildRequirements(RobotType.MINERFACTORY))
+			if (units(RobotType.MINERFACTORY) == 0 && !rc.hasBuildRequirements(RobotType.MINERFACTORY))
 				return null; // Save up until we can afford a mine factory
 			/*
 			 * We only build a factory if all factories of this type are already busy building, i.e. not idle
 			 * This means production is dependent on both need and resources
 			 */
-			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && ore > 0 && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < maxRounds &&
-					units(RobotType.MINERFACTORY) < 1+turn/1000)
+			if (rc.hasBuildRequirements(RobotType.MINERFACTORY) && !idle(RobotType.MINERFACTORY) && turn+RobotType.MINERFACTORY.buildTurns < maxRounds &&
+					units(RobotType.MINERFACTORY) < 1)
 				return RobotType.MINERFACTORY;
 			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < maxRounds &&
 					units(RobotType.HELIPAD) == 0)
@@ -133,7 +132,7 @@ public class BuildStrategy {
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < maxRounds &&
 					units(RobotType.TRAININGFIELD) == 0)
 				return RobotType.TRAININGFIELD;
-			else if (maxRounds - turn < 200 && rc.hasBuildRequirements(RobotType.HANDWASHSTATION) && turn+RobotType.HANDWASHSTATION.buildTurns < maxRounds)
+			else if (maxRounds - turn < 200 && rc.hasBuildRequirements(RobotType.HANDWASHSTATION))// && turn+RobotType.HANDWASHSTATION.buildTurns < maxRounds)
 				return RobotType.HANDWASHSTATION;
 			else if (rc.hasBuildRequirements(RobotType.SUPPLYDEPOT) && turn+RobotType.SUPPLYDEPOT.buildTurns < maxRounds &&
 					units(RobotType.SUPPLYDEPOT) < Math.min(30, requiredTowers))
@@ -141,7 +140,7 @@ public class BuildStrategy {
 			break;
 		case MINERFACTORY:
 			if (rc.hasSpawnRequirements(RobotType.MINER) && turn+RobotType.MINER.buildTurns < maxRounds &&
-					units(RobotType.MINER) < Math.min(units(RobotType.LAUNCHER)+20, requiredMiners))
+					units(RobotType.MINER) < requiredMiners) //Math.min(units(RobotType.LAUNCHER)+20, requiredMiners))
 				return RobotType.MINER;
 			break;
 		case TECHNOLOGYINSTITUTE:
@@ -156,7 +155,7 @@ public class BuildStrategy {
 			break;
 		case HELIPAD:
 			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < maxRounds &&
-					units(RobotType.DRONE)+units(RobotType.LAUNCHER) < 1)
+					units(RobotType.DRONE) < 1)
 				return RobotType.DRONE;
 			break;
 		case TANKFACTORY:
