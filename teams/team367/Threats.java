@@ -143,7 +143,7 @@ public class Threats {
 	public boolean overwhelms(MapLocation myLoc) {
 		double enemyRating = 0.0;
 		double allyRating = 0.0;
-		int senseRange = rc.getType().sensorRadiusSquared * 4;
+		int senseRange = rc.getType().sensorRadiusSquared * 2;
 		RobotInfo[] units = rc.senseNearbyRobots(senseRange);
 		
 		double[] multiplier = { 1.0, 1.25, 1.25, 1.25, 2.0, 2.0, 5.0 }; //The effective Health of the HQ is affected by the number of towers
@@ -159,7 +159,7 @@ public class Threats {
 		}
 		
 		//Add in myself - it is not returned in the sense data
-		if (rc.getType().canAttack() && rc.getType().canMove() && !rc.getType().canMine())
+		if (rc.getType().canAttack() && rc.getType().canMove())
 			allyRating += rc.getHealth() * weighting[rc.getType().ordinal()];
 		
 		//Add rating from nearby units
