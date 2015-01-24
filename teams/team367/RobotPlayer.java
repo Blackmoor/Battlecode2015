@@ -407,7 +407,7 @@ public class RobotPlayer {
 	// If our tile is threatened we should retreat unless the enemy is quicker than us
 	// If the enemy can advance and fire before we can move away we might as well stand and fight
 	private static boolean shouldRetreat() {
-		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0)
+		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0 && rc.getSupplyLevel() == 0)
 			return true;
 		return threats.isThreatened(myLoc);
 	}
@@ -650,59 +650,41 @@ public class RobotPlayer {
 		int lastTurn = Clock.getRoundNum() + GameConstants.MISSILE_LIFESPAN;
 		MapLocation target = null;
 		boolean targetMoves = true;
-		boolean towards = true;
 		
 		while (true) {
 			myLoc = rc.getLocation();
 			int turns = lastTurn - Clock.getRoundNum();
 			int damageRange = (1+turns)*(1+turns);
 			
-			if (targetMoves) {
+			if (targetMoves) { // Re-acquire the target's location
 				RobotInfo[] inRange = rc.senseNearbyRobots(damageRange, enemyTeam);
-				if (inRange.length == 0) { //No units to target
-					MapLocation enemyHQ = rc.senseEnemyHQLocation();
-					if (myLoc.distanceSquaredTo(enemyHQ) <= damageRange) { //Check for HQ
-						target = enemyHQ;
-						targetMoves = false;
-						towards = true;
-						rc.setIndicatorString(0, "Missile targetting HQ @" + target);
-					} else { //Check for towers
-						MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
-						for (MapLocation t: enemyTowers) {
-							if (myLoc.distanceSquaredTo(t) <= damageRange) {
-								target = t;
-								targetMoves = false;
-								towards = true;
-								rc.setIndicatorString(0, "Missile targetting Tower @" + target);
-								break;
-							}
-						}							
-						if (target == null) { //No targets - move away from allies
-							inRange = rc.senseNearbyRobots(damageRange, myTeam);
-							if (inRange.length > 0) {
-								target = inRange[0].location;
-								towards = false;
-								targetMoves = inRange[0].type.canMove();
-								rc.setIndicatorString(0, "Missile retreating from " + inRange[0].type + " @" + target);
-							}
-						}
-					}
-				} else {
+				if (inRange.length > 0) { //No units to target
 					target = inRange[0].location;
 					targetMoves = inRange[0].type.canMove();
-					towards = true;
 					rc.setIndicatorString(0, "Missile targetting " + inRange[0].type + "@" + target);
+				} else {
+					targetMoves = false; // Pick a tower or the HQ
+					MapLocation[] enemyTowers = rc.senseEnemyTowerLocations();
+					for (MapLocation t: enemyTowers) {
+						if (myLoc.distanceSquaredTo(t) <= damageRange) {
+							target = t;
+							rc.setIndicatorString(0, "Missile targetting Tower @" + target);
+							break;
+						}
+					}
+					if (target == null) {
+						target = rc.senseEnemyHQLocation();
+						rc.setIndicatorString(0, "Missile targetting HQ @" + target);
+					}
 				}
 			}
 			
 			try {
 				if (target != null) {
-					if (towards && myLoc.distanceSquaredTo(target) <= GameConstants.MISSILE_RADIUS_SQUARED)
+					if (myLoc.distanceSquaredTo(target) <= GameConstants.MISSILE_RADIUS_SQUARED)
 						rc.explode();
 					else {
 						Direction d = myLoc.directionTo(target);
-						if (!towards)
-							d = d.opposite();
 						if (rc.canMove(d))
 							rc.move(d);
 						else if (rc.canMove(d.rotateLeft()))
