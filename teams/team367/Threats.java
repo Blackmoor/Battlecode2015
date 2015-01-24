@@ -107,10 +107,12 @@ public class Threats {
 			
 			Team enemyTeam = rc.getTeam().opponent();
 			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared)) {
-				if (u.type == RobotType.MISSILE && myType == RobotType.COMMANDER) { //Assume a missile can reach us, even ours!
-					result = true;
-					break;
-				}				
+				if (u.type == RobotType.MISSILE) {
+					if (myType == RobotType.COMMANDER || (u.team == enemyTeam && myType.movementDelay <= 1)) {
+						result = true;
+						break;
+					}
+				}
 
 				if (u.team == enemyTeam && u.type.canAttack() && u.location.distanceSquaredTo(m) <= u.type.attackRadiusSquared) {
 					int enemyTurns = Math.max(0, (int)(u.weaponDelay-0.5));
