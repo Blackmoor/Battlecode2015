@@ -72,11 +72,14 @@ public class RobotPlayer {
 	//HQ is responsible for collating unit counts and broadcasting them each turn
 	//It also needs to pass on its supply each turn and fire if there are enemies in range
 	private static void runHQ() {
+		double lastOre = 500;
 		strategy = new BuildStrategy(rc);
 		
 		while(true) {
 			threats.update();
 			strategy.broadcast();
+			double oreIncome = rc.getTeamOre() - lastOre + strategy.oreSpent();
+			//System.out.println("Ore income " + oreIncome + " per miner = " + (oreIncome-5) / (strategy.units(RobotType.MINER) + strategy.units(RobotType.BEAVER)));
 			
 			// See if we need to spawn a beaver
 			if (rc.isCoreReady()) {
@@ -134,6 +137,7 @@ public class RobotPlayer {
 			
 			doTransfer();
 			
+			lastOre = rc.getTeamOre();
 			rc.yield();
 		}
 	}
@@ -145,8 +149,6 @@ public class RobotPlayer {
 			//Attack if there is an enemy in sight
 			if (rc.isWeaponReady())
 				attackWeakest();
-			
-			doTransfer();
 			
 			rc.yield();
 		}
@@ -397,30 +399,48 @@ public class RobotPlayer {
 	}
 	
 	//Supply our units
+	//Getting supply to the buildings producing units is cool
 	private static void doTransfer() {
-		if (Clock.getBytecodesLeft() > 850) { //Transfer costs 500, sense costs 100 and we need some processing time
-			double supply = rc.getSupplyLevel();
-			double supplyToKeep = myType.supplyUpkeep*10; // 10 turns worth of supply
-			if (supply > supplyToKeep) {		
-				RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.SUPPLY_TRANSFER_RADIUS_SQUARED, myTeam);			
-				//Pass to first neighbour with half the supply we have
-				//Never pass to buildings and always fully empty the HQ
-				for (RobotInfo r: robots) {
-					if (r.type.needsSupply() && r.supplyLevel * 2.0 < supply) {
-						double toTransfer = supply - supplyToKeep;
-						// Keep half of what you have available unless you are the HQ
-						if (myType != RobotType.HQ)
-							toTransfer /= 2.0;
-						try {							
-							rc.transferSupplies((int)toTransfer, r.location);
-						} catch (GameActionException e) {
-							System.out.println("Supply exception");
-							//e.printStackTrace();
-						}
-						break;
-					}
-				}
-			}
+		double supply = rc.getSupplyLevel();
+		double supplyToKeep = myType.supplyUpkeep*10; // 10 turns worth of supply
+		if (myType == RobotType.COMMANDER)
+			supplyToKeep *= 10;
+		if (supply < supplyToKeep)
+			return;
+		
+		RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.SUPPLY_TRANSFER_RADIUS_SQUARED, myTeam);			
+		//Pass to first neighbour with half the supply we have
+		RobotInfo target = null;
+		
+		//Pick the nearest ally with the least supply
+		for (RobotInfo r: robots) {
+			//Never pass supply to buildings that can't spawn or to the HQ
+			if (r.type == RobotType.HQ || r.type == RobotType.TOWER || r.type == RobotType.SUPPLYDEPOT || r.type == RobotType.HANDWASHSTATION)
+				continue;
+			
+			//Drone will only pass to units with 0 supply
+			if (myType == RobotType.DRONE && r.supplyLevel > 0)
+				continue;
+			
+			if (target == null || r.supplyLevel < target.supplyLevel)
+				target = r;
+			
+			if (Clock.getBytecodesLeft() < 600)
+				break;
+		}
+		
+		double toTransfer = supply - supplyToKeep;
+		if (target == null || supply < target.supplyLevel * 2.0)
+			return;
+		
+		// Keep half of what we have available unless we are the HQ
+		if (target.type != RobotType.HQ)
+			toTransfer /= 2.0;
+		try {							
+			rc.transferSupplies((int)toTransfer, target.location);
+		} catch (GameActionException e) {
+			System.out.println("Supply exception");
+			//e.printStackTrace();
 		}
 	}
 	
@@ -501,6 +521,7 @@ public class RobotPlayer {
 	private static boolean shouldRetreat() {
 		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0)
 			return true;
+
 		return threats.isThreatened(myLoc);
 	}
 	
@@ -667,14 +688,6 @@ public class RobotPlayer {
 
 	// Move towards enemy HQ if we can attack
 	private static void doAdvanceMove() {
-		try {
-			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-				flashTowards(threats.enemyHQ, false);
-		} catch (GameActionException e) {
-			System.out.println("Flash exception");
-			//e.printStackTrace();
-		}			
-
 		if (rc.isCoreReady()) {
 			Direction dir = null;
 			
@@ -720,14 +733,7 @@ public class RobotPlayer {
 		
 		if (nearest != null) {
 			if (ignoreThreat || myLoc.distanceSquaredTo(nearest.location) > attackRange) {
-				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);
-				try {
-					if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
-						flashTowards(nearest.location, false);
-				} catch (GameActionException e) {
-					System.out.println("Flash exception");
-					//e.printStackTrace();
-				}			
+				rc.setIndicatorString(2, "Closing with " + nearest.type + " at " + nearest.location);		
 				if (rc.isCoreReady())
 					tryMove(rc.getLocation().directionTo(nearest.location), ignoreThreat);
 			} else {
