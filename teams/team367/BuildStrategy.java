@@ -118,7 +118,8 @@ public class BuildStrategy {
 			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < maxRounds &&
 					units(RobotType.HELIPAD) == 0)
 				return RobotType.HELIPAD;
-			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < maxRounds)
+			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < maxRounds &&
+					units(RobotType.TRAININGFIELD) > 0)
 				return RobotType.AEROSPACELAB;
 			/*
 			else if (rc.hasBuildRequirements(RobotType.BARRACKS) && !idle(RobotType.BARRACKS) && turn+RobotType.BARRACKS.buildTurns < maxRounds)
@@ -127,7 +128,7 @@ public class BuildStrategy {
 				return RobotType.TANKFACTORY;
 			*/
 			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < maxRounds &&
-					units(RobotType.TECHNOLOGYINSTITUTE) == 0 && units(RobotType.AEROSPACELAB) > 0)
+					units(RobotType.TECHNOLOGYINSTITUTE) == 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < maxRounds &&
 					units(RobotType.TRAININGFIELD) == 0)
@@ -135,7 +136,7 @@ public class BuildStrategy {
 			else if (maxRounds - turn < 200 && rc.hasBuildRequirements(RobotType.HANDWASHSTATION))// && turn+RobotType.HANDWASHSTATION.buildTurns < maxRounds)
 				return RobotType.HANDWASHSTATION;
 			else if (rc.hasBuildRequirements(RobotType.SUPPLYDEPOT) && turn+RobotType.SUPPLYDEPOT.buildTurns < maxRounds &&
-					units(RobotType.SUPPLYDEPOT) < Math.min(30, requiredTowers))
+					units(RobotType.SUPPLYDEPOT) < Math.min(36, requiredTowers))
 				return RobotType.SUPPLYDEPOT;
 			break;
 		case MINERFACTORY:
@@ -144,7 +145,7 @@ public class BuildStrategy {
 				return RobotType.MINER;
 			break;
 		case TECHNOLOGYINSTITUTE:
-			if (turn > 600 && rc.hasSpawnRequirements(RobotType.COMPUTER) && turn+RobotType.COMPUTER.buildTurns < maxRounds &&
+			if (rc.hasSpawnRequirements(RobotType.COMPUTER) && turn+RobotType.COMPUTER.buildTurns < maxRounds &&
 					units(RobotType.COMPUTER) < 1)
 				return RobotType.COMPUTER;
 			break;
@@ -155,7 +156,7 @@ public class BuildStrategy {
 			break;
 		case HELIPAD:
 			if (rc.hasSpawnRequirements(RobotType.DRONE) && turn+RobotType.DRONE.buildTurns < maxRounds &&
-					units(RobotType.DRONE) < 1)
+					units(RobotType.DRONE) < 1+turn/850)
 				return RobotType.DRONE;
 			break;
 		case TANKFACTORY:
