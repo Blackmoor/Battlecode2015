@@ -127,10 +127,14 @@ public class MapInfo {
 		int mx = x + (hq.x/GameConstants.MAP_MAX_WIDTH)*GameConstants.MAP_MAX_WIDTH;
 		int my = y + (hq.y/GameConstants.MAP_MAX_HEIGHT)*GameConstants.MAP_MAX_HEIGHT;
 
-		while (mx > maxX)
+		if (mx > maxX)
 			mx -= GameConstants.MAP_MAX_WIDTH;
-		while (my > maxY)
+		else if (mx < minX)
+			mx += GameConstants.MAP_MAX_WIDTH;;
+		if (my > maxY)
 			my -= GameConstants.MAP_MAX_HEIGHT;
+		else if (my < minY)
+			my += GameConstants.MAP_MAX_HEIGHT;
 		//System.out.println("Mapping " + x + "," + y + " to " + mx + "," + my);
 		return tile(new MapLocation(mx, my));
 	}
