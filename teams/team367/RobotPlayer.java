@@ -396,20 +396,19 @@ public class RobotPlayer {
 		}
 	}
 	
+	//Supply our units
 	private static void doTransfer() {
-		//Supply units
 		if (Clock.getBytecodesLeft() > 850) { //Transfer costs 500, sense costs 100 and we need some processing time
 			double supply = rc.getSupplyLevel();
 			double supplyToKeep = myType.supplyUpkeep*10; // 10 turns worth of supply
-			if (myType == RobotType.COMMANDER)
-				supplyToKeep = (maxRounds - Clock.getRoundNum()) * myType.supplyUpkeep; // Keep enough to last to the end of the game
 			if (supply > supplyToKeep) {		
 				RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.SUPPLY_TRANSFER_RADIUS_SQUARED, myTeam);			
 				//Pass to first neighbour with half the supply we have
 				//Never pass to buildings and always fully empty the HQ
 				for (RobotInfo r: robots) {
-					if (!r.type.isBuilding && r.supplyLevel * 2.0 < supply) {
-						double toTransfer = supply;
+					if (r.type.needsSupply() && r.supplyLevel * 2.0 < supply) {
+						double toTransfer = supply - supplyToKeep;
+						// Keep half of what you have available unless you are the HQ
 						if (myType != RobotType.HQ)
 							toTransfer /= 2.0;
 						try {							
@@ -436,7 +435,7 @@ public class RobotPlayer {
 			else
 				moveDir = moveDir.rotateLeft();
 			if (moveDir == Direction.NORTH)
-				droneMoveMax += 3;
+				droneMoveMax += 4;
 			droneMoveCurrent = droneMoveMax;
 		}
 		
@@ -455,7 +454,7 @@ public class RobotPlayer {
 					moveDir = moveDir.opposite();
 					patrolClockwise = !patrolClockwise;
 					if (moveDir == Direction.NORTH)
-						droneMoveMax += 3;
+						droneMoveMax += 4;
 					droneMoveCurrent = droneMoveMax;
 				}
 			} catch (GameActionException e) {
@@ -470,17 +469,16 @@ public class RobotPlayer {
 	 * Drones with supply head to the nearest unit without supply
 	 */
 	private static void doSupply() {
-		if (rc.getSupplyLevel() == 0)
-			tryMove(myLoc.directionTo(myHQ), false);
-		else {
+		if (rc.getSupplyLevel() > 2000) {
 			RobotInfo[] units = rc.senseNearbyRobots(Integer.MAX_VALUE, myTeam);
 			for (RobotInfo r: units) {
-				if (r.supplyLevel == 0 && !r.type.isBuilding) {
+				if (r.supplyLevel == 0 && r.type.needsSupply()) {
 					tryMove(myLoc.directionTo(r.location), false);
-					break;
+					return;
 				}
 			}
 		}
+		tryMove(myLoc.directionTo(myHQ), false);
 	}
 	
 	/*
@@ -592,7 +590,7 @@ public class RobotPlayer {
 			lastMove = directions[rand.nextInt(directions.length)];
 		
 		Direction startDir = lastMove;
-		while (!rc.canMove(lastMove)) {
+		while (!rc.canMove(lastMove) || threats.isThreatened(myLoc.add(lastMove))) {
 			if (rc.getID() % 2 == 0)
 				lastMove = lastMove.rotateLeft();
 			else
@@ -637,18 +635,18 @@ public class RobotPlayer {
 	}
 	
 	private static void doMinerMove() {
-		double ore = rc.senseOre(myLoc);
-
 		//If there is an available adjacent tile with twice as much ore we are better off moving
 		Direction startDir = directions[rand.nextInt(directions.length)];
 		Direction d = startDir;
 		Direction best = Direction.NONE;
-		double mostOre = ore*2; //Only move if there is twice as much ore
+		double mostOre = rc.senseOre(myLoc)*2; //Only move if there is twice as much ore
 		boolean done = false;
 		while (!done) {
 			if (rc.canMove(d)) {
 				MapLocation adj = rc.getLocation().add(d);
-				if (rc.senseOre(adj) > mostOre && !threats.isThreatened(adj)) {
+				double ore = rc.senseOre(adj);
+				if ((ore > mostOre || (ore == mostOre && adj.distanceSquaredTo(myHQ) > myLoc.distanceSquaredTo(myHQ)))
+						&& !threats.isThreatened(adj)) {
 					mostOre = rc.senseOre(adj);
 					best = d;
 				}
