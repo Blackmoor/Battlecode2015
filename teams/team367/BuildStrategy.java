@@ -12,6 +12,7 @@ public class BuildStrategy {
 	private boolean[] isIdle; //Set to true if a building of this type is not actively building
 	private int requiredTowers; // The number of supply towers we need to support the units
 	private int requiredMiners; // The number of miners we need to support all the factories and beavers we have
+	private int oreSpent; // The total ore spent this turn
 	private int maxRounds; // The turn on which the game will end
 	
 	public BuildStrategy(RobotController myrc) {
@@ -52,8 +53,13 @@ public class BuildStrategy {
 				requiredTowers = (int)Math.ceil(Math.pow(supportCost/100-2, 1.0/GameConstants.SUPPLY_GEN_EXPONENT));
 			rc.broadcast(50030, requiredTowers);
 			
-			requiredMiners = (int)Math.ceil((factories + units(RobotType.BEAVER)) * 4 / GameConstants.MINER_MINE_MAX); //Assume 2.5 income from miners and average usage from factories and beavers
+			if (Clock.getRoundNum() * 10 > rc.getRoundLimit() * 7) //70% of the way through the game we stop producing miners
+				requiredMiners = 0;
+			else
+				requiredMiners = (int)Math.ceil(factories * 8 / GameConstants.MINER_MINE_MAX); //Assume 2.5 income from miners and average usage from factories and beavers
 			rc.broadcast(50031, requiredMiners);
+			oreSpent = rc.readBroadcast(50032);
+			rc.broadcast(50032, 0); // Zero the amount of ore spent this round - other bots add to this value
 		} catch (GameActionException e) {
 			e.printStackTrace();
 		}
@@ -67,6 +73,8 @@ public class BuildStrategy {
 			data |= 1;
 		try {
 			rc.broadcast(50000+i, data);
+			oreSpent += t.oreCost;
+			rc.broadcast(50032, oreSpent);
 		} catch (GameActionException e) {
 			System.out.println("Broadcast exception");
 			//e.printStackTrace();
@@ -86,8 +94,10 @@ public class BuildStrategy {
 			}
 			requiredTowers = rc.readBroadcast(50030);
 			requiredMiners = rc.readBroadcast(50031);
+			oreSpent = rc.readBroadcast(50032);
 		} catch (GameActionException e) {
-			e.printStackTrace();
+			System.out.println("Broadcast exception");
+			//e.printStackTrace();
 		}
 	}
 	
@@ -97,6 +107,10 @@ public class BuildStrategy {
 	
 	private boolean idle(RobotType type) {
 		return isIdle[type.ordinal()];
+	}
+	
+	public int oreSpent() {
+		return this.oreSpent;
 	}
 	
 	// returns the type of unit we should build this turn or null if there is nothing to do
@@ -118,8 +132,7 @@ public class BuildStrategy {
 			else if (rc.hasBuildRequirements(RobotType.HELIPAD) && !idle(RobotType.HELIPAD) && turn+RobotType.HELIPAD.buildTurns < maxRounds &&
 					units(RobotType.HELIPAD) == 0)
 				return RobotType.HELIPAD;
-			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < maxRounds &&
-					units(RobotType.TRAININGFIELD) > 0)
+			else if (rc.hasBuildRequirements(RobotType.AEROSPACELAB) && !idle(RobotType.AEROSPACELAB) && turn+RobotType.AEROSPACELAB.buildTurns < maxRounds)
 				return RobotType.AEROSPACELAB;
 			/*
 			else if (rc.hasBuildRequirements(RobotType.BARRACKS) && !idle(RobotType.BARRACKS) && turn+RobotType.BARRACKS.buildTurns < maxRounds)
@@ -128,7 +141,7 @@ public class BuildStrategy {
 				return RobotType.TANKFACTORY;
 			*/
 			else if (rc.hasBuildRequirements(RobotType.TECHNOLOGYINSTITUTE) && turn+RobotType.TECHNOLOGYINSTITUTE.buildTurns < maxRounds &&
-					units(RobotType.TECHNOLOGYINSTITUTE) == 0)
+					units(RobotType.TECHNOLOGYINSTITUTE) == 0 && units(RobotType.AEROSPACELAB) > 0)
 				return RobotType.TECHNOLOGYINSTITUTE;
 			else if (rc.hasBuildRequirements(RobotType.TRAININGFIELD) && turn+RobotType.TRAININGFIELD.buildTurns < maxRounds &&
 					units(RobotType.TRAININGFIELD) == 0)
@@ -146,7 +159,7 @@ public class BuildStrategy {
 			break;
 		case TECHNOLOGYINSTITUTE:
 			if (rc.hasSpawnRequirements(RobotType.COMPUTER) && turn+RobotType.COMPUTER.buildTurns < maxRounds &&
-					units(RobotType.COMPUTER) < 1)
+					turn > 600 && units(RobotType.COMPUTER) < 1)
 				return RobotType.COMPUTER;
 			break;
 		case BARRACKS:
