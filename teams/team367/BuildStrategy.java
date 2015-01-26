@@ -54,7 +54,7 @@ public class BuildStrategy {
 			rc.broadcast(50030, requiredTowers);
 			
 			if (Clock.getRoundNum() * 10 > rc.getRoundLimit() * 7) //70% of the way through the game we stop producing miners
-				requiredMiners = 0;
+				requiredMiners = 5;
 			else
 				requiredMiners = (int)Math.ceil(factories * 8 / GameConstants.MINER_MINE_MAX); //Assume 2.5 income from miners and average usage from factories and beavers
 			rc.broadcast(50031, requiredMiners);
