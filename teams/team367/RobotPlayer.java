@@ -24,6 +24,7 @@ public class RobotPlayer {
 	static int droneMoveMax; // Drones move this many tiles before switching direction
 	static int droneMoveCurrent; // How many turns before we change direction
 	static boolean patrolClockwise;
+	static boolean droneCentred;
 	
 	public static void run(RobotController theRC) {
 		rc = theRC;
@@ -176,8 +177,9 @@ public class RobotPlayer {
 	//Drones
 	private static void runDrone() {
 		moveDir = Direction.NORTH;
-		droneMoveCurrent = droneMoveMax = 3;
+		droneMoveCurrent = droneMoveMax = 2;
 		patrolClockwise = true;
+		droneCentred = false; // We haven't made it to the centre of our spiral yet
 		
 		while(true) {
 			threats.update();
@@ -449,13 +451,23 @@ public class RobotPlayer {
 	 * If there is a tie, pick the one nearest to the hq
 	 */
 	private static void doPatrol() {
-		if (--droneMoveCurrent <= 0) {
+		if (!droneCentred) {
+			//start point for the spiral is 2/3 of the way from our HQ to their HQ
+			MapLocation centre = new MapLocation((2*myHQ.x + threats.enemyHQ.x)/3-3, (2*myHQ.y+threats.enemyHQ.y)/3);
+			if (threats.isThreatened(centre) || myLoc.distanceSquaredTo(centre) <=  2)
+				droneCentred = true;
+			else {
+				moveDir = myLoc.directionTo(centre);
+			}
+		}
+		
+		if (droneCentred && --droneMoveCurrent <= 0) {
 			if (patrolClockwise)
 				moveDir = moveDir.rotateRight();
 			else
 				moveDir = moveDir.rotateLeft();
-			if (moveDir == Direction.NORTH)
-				droneMoveMax += 4;
+			if (moveDir == Direction.NORTH || moveDir == Direction.SOUTH)
+				droneMoveMax ++;
 			droneMoveCurrent = droneMoveMax;
 		}
 		
@@ -470,12 +482,14 @@ public class RobotPlayer {
 				} else if (rc.canMove(moveDir.rotateRight()) && !threats.isThreatened(myLoc.add(moveDir.rotateRight()))) {
 					rc.move(moveDir.rotateRight());
 					break;
-				} else {
+				} else if (droneCentred) {
 					moveDir = moveDir.opposite();
 					patrolClockwise = !patrolClockwise;
-					if (moveDir == Direction.NORTH)
-						droneMoveMax += 4;
+					if (moveDir == Direction.NORTH || moveDir == Direction.SOUTH)
+						droneMoveMax ++;
 					droneMoveCurrent = droneMoveMax;
+				} else {
+					break;
 				}
 			} catch (GameActionException e) {
 				System.out.println("Drone patrol exception");
@@ -713,6 +727,7 @@ public class RobotPlayer {
 		//Move to within attack range of the nearest enemy - ignore towers and HQ until later in the game
 		//We can move in closer if we are still out of range of the enemy
 		RobotInfo nearest = null;
+		RobotInfo preferred = null;
 		RobotInfo[] enemies = rc.senseNearbyRobots(senseRange*16, enemyTeam);
 		boolean canFly = (myType == RobotType.DRONE);
 		
@@ -724,9 +739,17 @@ public class RobotPlayer {
 			//Drones on VOID tiles cannot be reached by ground troops - ignore them
 			if (!canFly && rc.senseTerrainTile(e.location) != TerrainTile.NORMAL)
 				continue;
-			if (nearest == null || e.location.distanceSquaredTo(rc.getLocation()) < nearest.location.distanceSquaredTo(rc.getLocation()))
+			//Commanders are good at picking off miners and beavers - have a preference for them
+			if (myType == RobotType.COMMANDER && (e.type == RobotType.MINER || e.type == RobotType.BEAVER) &&
+					(preferred == null || e.location.distanceSquaredTo(myLoc) < preferred.location.distanceSquaredTo(myLoc)))
+				preferred = e;
+			if (nearest == null || e.location.distanceSquaredTo(myLoc) < nearest.location.distanceSquaredTo(myLoc))
 				nearest = e;
 		}
+		
+		if (preferred != null)
+			nearest = preferred;
+		
 		int attackRange = myType.attackRadiusSquared;
 		if (myType == RobotType.LAUNCHER)
 			attackRange = (1+GameConstants.MISSILE_LIFESPAN)*(1+GameConstants.MISSILE_LIFESPAN);
