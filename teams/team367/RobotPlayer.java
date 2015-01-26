@@ -73,13 +73,13 @@ public class RobotPlayer {
 	//HQ is responsible for collating unit counts and broadcasting them each turn
 	//It also needs to pass on its supply each turn and fire if there are enemies in range
 	private static void runHQ() {
-		double lastOre = 500;
+		//double lastOre = 500;
 		strategy = new BuildStrategy(rc);
 		
 		while(true) {
 			threats.update();
 			strategy.broadcast();
-			double oreIncome = rc.getTeamOre() - lastOre + strategy.oreSpent();
+			//double oreIncome = rc.getTeamOre() - lastOre + strategy.oreSpent();
 			//System.out.println("Ore income " + oreIncome + " per miner = " + (oreIncome-5) / (strategy.units(RobotType.MINER) + strategy.units(RobotType.BEAVER)));
 			
 			// See if we need to spawn a beaver
@@ -138,7 +138,7 @@ public class RobotPlayer {
 			
 			doTransfer();
 			
-			lastOre = rc.getTeamOre();
+			//lastOre = rc.getTeamOre();
 			rc.yield();
 		}
 	}

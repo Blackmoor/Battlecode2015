@@ -198,7 +198,7 @@ public class Bfs {
 			qTails[0]++;
 			processed[cropX(dest.x)][cropY(dest.y)] = true;
 		}
-		System.out.println("Cleanser BFS to " + dest + ", start round " + Clock.getRoundNum());
+		//System.out.println("Cleanser BFS to " + dest + ", start round " + Clock.getRoundNum());
 	}
 
 	// Computers calls this function to spend spare bytecodes computing paths for other units
