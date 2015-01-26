@@ -1,8 +1,8 @@
 package team367;
 
-import battlecode.common.*;
+import java.util.Random;
 
-import java.util.*;
+import battlecode.common.*;
 
 public class RobotPlayer {
 	static RobotController rc;
