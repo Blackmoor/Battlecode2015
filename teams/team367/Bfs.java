@@ -57,7 +57,7 @@ public class Bfs {
 	// yy = dest y coordinate (8 bits)
 	private void writePageMetadata(int page, int roundLastUpdated, MapLocation dest, int priority, boolean finished) throws GameActionException {
 		int channel = pageMetadataBaseChannel + page;
-		int data = (containsUnknowns ? 1<<31 : 0) | (finished ? 1<<30 : 0) | ((priority & 0x3) << 28) | (roundLastUpdated << 16) | (cropX(dest.x) << 8) | cropY(dest.y);
+		int data = (containsUnknowns ? 1<<31 : 0) | (finished ? 1<<30 : 0) | ((priority & 0x3) << 28) | ((roundLastUpdated & 0xfff) << 16) | (cropX(dest.x) << 8) | cropY(dest.y);
 		rc.broadcast(channel, data);
 	}
 
@@ -91,18 +91,20 @@ public class Bfs {
 		// see if we can reuse a page we used before
 		if (dest.equals(previousDest) && previousPage != -1) {
 			int previousPageMetadata = readPageMetadata(previousPage);
-			if (getMetadataRoundLastUpdated(previousPageMetadata) == previousRoundWorked) {
+			if (getMetadataRoundLastUpdated(previousPageMetadata) == (previousRoundWorked & 0xfff)) {
 				MapLocation where = getMetadataDestination(previousPageMetadata);
 				if (where.x == cropX(dest.x) && where.y == cropY(dest.y) ) {
-					if (! restart && getMetadataIsFinished(previousPageMetadata)) {
-						if (getMetadataIsComplete(previousPageMetadata))
-							return -1; // we're done! don't do any work!
-						//Restart the search with more up to data map info
+					if (restart) {
 						initQueue(dest);
-						return previousPage;
-					} else {
-						return previousPage;
+					} else if (getMetadataIsFinished(previousPageMetadata)) {
+						if (getMetadataIsComplete(previousPageMetadata)) {
+							return -1; //We finished and there where no unknowns
+						} else {
+							initQueue(dest); //We finished but there were unknowns
+						}
 					}
+	
+					return previousPage;
 				}
 			}
 		}
@@ -196,6 +198,7 @@ public class Bfs {
 			qTails[0]++;
 			processed[cropX(dest.x)][cropY(dest.y)] = true;
 		}
+		System.out.println("Cleanser BFS to " + dest + ", start round " + Clock.getRoundNum());
 	}
 
 	// Computers calls this function to spend spare bytecodes computing paths for other units
@@ -206,7 +209,7 @@ public class Bfs {
 			if (page == -1) {
 				return true; // We can't do any work, or don't have to
 			}
-			return doWork(dest, priority, stopWhen, page, restart);
+			return doWork(dest, priority, stopWhen, page);
 		} catch (GameActionException e) {
 			System.out.println("Bfs exception");
 			//e.printStackTrace();
@@ -214,10 +217,9 @@ public class Bfs {
 		return false;
 	}
 	
-	private boolean doWork(MapLocation dest, int priority, int stopWhen, int page, boolean restart) throws GameActionException {
-		if (!dest.equals(previousDest) || restart) {
+	private boolean doWork(MapLocation dest, int priority, int stopWhen, int page) throws GameActionException {
+		if (!dest.equals(previousDest)) {
 			initQueue(dest);
-			System.out.print("Cleanser BFS to " + dest + ", page " + page+ ", start round " + Clock.getRoundNum() + "\n");
 		}
 
 		previousDest = dest;
