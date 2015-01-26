@@ -177,7 +177,8 @@ public class RobotPlayer {
 	//Drones
 	private static void runDrone() {
 		moveDir = Direction.NORTH;
-		droneMoveCurrent = droneMoveMax = 2;
+		droneMoveCurrent = 1;
+		droneMoveMax = 2;
 		patrolClockwise = true;
 		droneCentred = false; // We haven't made it to the centre of our spiral yet
 		
@@ -452,8 +453,8 @@ public class RobotPlayer {
 	 */
 	private static void doPatrol() {
 		if (!droneCentred) {
-			//start point for the spiral is 2/3 of the way from our HQ to their HQ
-			MapLocation centre = new MapLocation((2*myHQ.x + threats.enemyHQ.x)/3-3, (2*myHQ.y+threats.enemyHQ.y)/3);
+			//start point for the spiral is 2/5 of the way from our HQ to their HQ
+			MapLocation centre = new MapLocation((3*myHQ.x + 2*threats.enemyHQ.x)/5, (3*myHQ.y+2*threats.enemyHQ.y)/5);
 			if (threats.isThreatened(centre) || myLoc.distanceSquaredTo(centre) <=  2)
 				droneCentred = true;
 			else {
@@ -466,7 +467,7 @@ public class RobotPlayer {
 				moveDir = moveDir.rotateRight();
 			else
 				moveDir = moveDir.rotateLeft();
-			if (moveDir == Direction.NORTH || moveDir == Direction.SOUTH)
+			if (!moveDir.isDiagonal())
 				droneMoveMax ++;
 			droneMoveCurrent = droneMoveMax;
 		}
@@ -485,7 +486,7 @@ public class RobotPlayer {
 				} else if (droneCentred) {
 					moveDir = moveDir.opposite();
 					patrolClockwise = !patrolClockwise;
-					if (moveDir == Direction.NORTH || moveDir == Direction.SOUTH)
+					if (!moveDir.isDiagonal())
 						droneMoveMax ++;
 					droneMoveCurrent = droneMoveMax;
 				} else {
