@@ -75,6 +75,7 @@ public class MapInfo {
 			if (m.y > maxY)
 				maxY = m.y;
 		}
+		
 		//System.out.println("Map initialised: Symmetry " + symmetry + " TopLeft " + minX + "," + minY + " BottomRight " + maxX + "," + maxY);
 	}
 	
@@ -127,13 +128,13 @@ public class MapInfo {
 		int mx = x + (hq.x/GameConstants.MAP_MAX_WIDTH)*GameConstants.MAP_MAX_WIDTH;
 		int my = y + (hq.y/GameConstants.MAP_MAX_HEIGHT)*GameConstants.MAP_MAX_HEIGHT;
 
-		if (mx > maxX)
+		while (mx > maxX)
 			mx -= GameConstants.MAP_MAX_WIDTH;
-		else if (mx < minX)
+		while (mx < minX)
 			mx += GameConstants.MAP_MAX_WIDTH;;
-		if (my > maxY)
+		while (my > maxY)
 			my -= GameConstants.MAP_MAX_HEIGHT;
-		else if (my < minY)
+		while (my < minY)
 			my += GameConstants.MAP_MAX_HEIGHT;
 		//System.out.println("Mapping " + x + "," + y + " to " + mx + "," + my);
 		return tile(new MapLocation(mx, my));
