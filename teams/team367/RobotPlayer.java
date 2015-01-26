@@ -702,7 +702,15 @@ public class RobotPlayer {
 
 	// Move towards enemy HQ if we can attack
 	private static void doAdvanceMove() {
-		if (rc.isCoreReady()) {
+		try {
+			if (myType == RobotType.COMMANDER && rc.hasLearnedSkill(CommanderSkillType.FLASH) && rc.getFlashCooldown() == 0)
+				flashTowards(threats.enemyHQ, false);
+		} catch (GameActionException e) {
+			System.out.println("Flash exception");
+			//e.printStackTrace();
+		}
+		
+		if (rc.isCoreReady()) {		
 			Direction dir = null;
 			
 			if (myType.canAttack() || (myType == RobotType.LAUNCHER && Clock.getRoundNum() > 550)) {
@@ -739,8 +747,8 @@ public class RobotPlayer {
 			//Drones on VOID tiles cannot be reached by ground troops - ignore them
 			if (!canFly && rc.senseTerrainTile(e.location) != TerrainTile.NORMAL)
 				continue;
-			//Commanders are good at picking off miners and beavers - have a preference for them
-			if (myType == RobotType.COMMANDER && (e.type == RobotType.MINER || e.type == RobotType.BEAVER) &&
+			//Commanders are good at picking off miners, beavers and non combat buildings - have a preference for them
+			if (myType == RobotType.COMMANDER && commanderLikes(e.type) &&
 					(preferred == null || e.location.distanceSquaredTo(myLoc) < preferred.location.distanceSquaredTo(myLoc)))
 				preferred = e;
 			if (nearest == null || e.location.distanceSquaredTo(myLoc) < nearest.location.distanceSquaredTo(myLoc))
@@ -765,6 +773,10 @@ public class RobotPlayer {
 			return true;
 		}
 		return false;
+	}
+	
+	private static boolean commanderLikes(RobotType t) {
+		return (t == RobotType.MINER || t == RobotType.BEAVER || (t.isBuilding && t.canAttack() == false));
 	}
 	
 	private static void runMissile() {
