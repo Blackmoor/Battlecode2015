@@ -57,6 +57,26 @@ public class Threats {
 	}
 	
 	/*
+	 * Returns true if we want to retreat from a missile
+	 * Commanders and anything with a move of 1 (DRONES) should pull back
+	 */
+	public boolean inMissileRange() {
+		RobotType myType = rc.getType();
+		if (myType != RobotType.COMMANDER || myType.movementDelay > 1)
+			return false;
+		
+		Team enemyTeam = rc.getTeam().opponent();
+		for (RobotInfo u: rc.senseNearbyRobots(myType.sensorRadiusSquared)) {
+			if (u.type == RobotType.MISSILE) {
+				if (myType == RobotType.COMMANDER || u.team == enemyTeam) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+	/*
 	 * A tile is considered threatened if an enemy can fire on it before we can move out from it
 	 * This routine can be called for our own tile or adjacent tiles.
 	 * When considering adjacent tiles we need to factor in the time it would take to move in and then move out
@@ -105,16 +125,8 @@ public class Threats {
 			if (suppliedTurns < turns) //We run out of supply
 				turns = 2 * turns - suppliedTurns;
 			
-			Team enemyTeam = rc.getTeam().opponent();
-			for (RobotInfo u: rc.senseNearbyRobots(rc.getType().sensorRadiusSquared)) {
-				if (u.type == RobotType.MISSILE) {
-					if (myType == RobotType.COMMANDER || (u.team == enemyTeam && myType.movementDelay <= 1)) {
-						result = true;
-						break;
-					}
-				}
-
-				if (u.team == enemyTeam && u.type.canAttack() && u.location.distanceSquaredTo(m) <= u.type.attackRadiusSquared) {
+			for (RobotInfo u: rc.senseNearbyRobots(myType.sensorRadiusSquared, rc.getTeam().opponent())) {
+				if (u.type.canAttack() && u.location.distanceSquaredTo(m) <= u.type.attackRadiusSquared) {
 					int enemyTurns = Math.max(0, (int)(u.weaponDelay-0.5));
 					suppliedTurns = (int)(u.supplyLevel/u.type.supplyUpkeep);
 					if (suppliedTurns < enemyTurns)

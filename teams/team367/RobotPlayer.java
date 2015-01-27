@@ -226,10 +226,11 @@ public class RobotPlayer {
 				
 				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				} else if (ore == 0) {
-					doSearchMove();
 				} else {
 					doMinerMove();
+					if (ore == 0 && rc.isCoreReady()) { // We didn't find ore nearby
+						doSearchMove();
+					}
 				}
 			}
 			
@@ -277,10 +278,11 @@ public class RobotPlayer {
 				
 				if (!ignoreThreat && shouldRetreat()) {
 					doRetreatMove(); //Pull back if in range of the enemy guns
-				} else if (ore == 0) {
-					doSearchMove();
 				} else {
 					doMinerMove();
+					if (ore == 0 && rc.isCoreReady()) { // We didn't find ore nearby
+						doSearchMove();
+					}
 				}
 			}
 			
@@ -537,7 +539,7 @@ public class RobotPlayer {
 		if (myType == RobotType.LAUNCHER && rc.getMissileCount() == 0)
 			return true;
 
-		return threats.isThreatened(myLoc);
+		return threats.isThreatened(myLoc) || threats.inMissileRange();
 	}
 	
 	private static boolean inCombat(int multiplier) {
@@ -622,6 +624,7 @@ public class RobotPlayer {
 		//We keep moving in the direction we were going
 		//When blocked we turn left or right depending on our unique ID
 		
+		rc.setIndicatorString(2, "Mining: No ore - searching");
 		if (lastMove == null)
 			lastMove = directions[rand.nextInt(directions.length)];
 		
