@@ -62,15 +62,13 @@ public class Threats {
 	 */
 	public boolean inMissileRange() {
 		RobotType myType = rc.getType();
-		if (myType != RobotType.COMMANDER || myType.movementDelay > 1)
-			return false;
-		
-		Team enemyTeam = rc.getTeam().opponent();
-		for (RobotInfo u: rc.senseNearbyRobots(myType.sensorRadiusSquared)) {
-			if (u.type == RobotType.MISSILE) {
-				if (myType == RobotType.COMMANDER || u.team == enemyTeam) {
+		if (myType == RobotType.COMMANDER || myType == RobotType.DRONE) {		
+			Team enemyTeam = rc.getTeam().opponent();
+			for (RobotInfo u: rc.senseNearbyRobots(myType.sensorRadiusSquared)) {
+				if (u.type == RobotType.MISSILE && (myType == RobotType.COMMANDER || u.team == enemyTeam))
 					return true;
-				}
+				if (u.team == enemyTeam && u.type == RobotType.LAUNCHER && u.missileCount > 0)
+					return true;
 			}
 		}
 		return false;
