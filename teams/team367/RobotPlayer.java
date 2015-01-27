@@ -638,7 +638,7 @@ public class RobotPlayer {
 		//When blocked we turn left or right depending on our unique ID
 		
 		rc.setIndicatorString(2, "Mining: No ore - searching");
-		if (lastMove == null)
+		if (lastMove == null || rand.nextInt(10) == 1)
 			lastMove = directions[rand.nextInt(directions.length)];
 		
 		Direction startDir = lastMove;
@@ -697,7 +697,7 @@ public class RobotPlayer {
 			if (rc.canMove(d)) {
 				MapLocation adj = rc.getLocation().add(d);
 				double ore = rc.senseOre(adj);
-				if ((ore > mostOre || (ore == mostOre && adj.distanceSquaredTo(myHQ) > myLoc.distanceSquaredTo(myHQ)))
+				if ((ore > mostOre || (ore == mostOre && ore > 0 && adj.distanceSquaredTo(myHQ) > myLoc.distanceSquaredTo(myHQ)))
 						&& !threats.isThreatened(adj)) {
 					mostOre = rc.senseOre(adj);
 					best = d;
